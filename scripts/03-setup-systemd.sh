@@ -87,11 +87,11 @@ Type=simple
 User=$APP_USER
 Group=$APP_GROUP
 WorkingDirectory=$MCP_DIR
-# Eseguiamo il server node/python sulla porta 8420 e puntandolo alla cartella di Rclone
-ExecStart=/usr/bin/env npm start
+# Eseguiamo il server sulla porta 8420 tramite uv
+ExecStart=/usr/local/bin/uv run vault-mcp
 EnvironmentFile=$ENV_FILE
-Environment=PORT=8420
-Environment=OBSIDIAN_DIR=$MOUNT_DIR
+Environment=VAULT_MCP_PORT=8420
+Environment=VAULT_PATH=$MOUNT_DIR
 Restart=on-failure
 RestartSec=10
 
