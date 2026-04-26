@@ -16,6 +16,23 @@ APP_USER=${SUDO_USER:-$USER}
 APP_GROUP=$(id -gn $APP_USER)
 HOME_DIR=$(eval echo ~$APP_USER)
 
+ENV_FILE=""
+for p in "./.env" "../.env" "$(dirname "$0")/../.env" "$(dirname "$0")/.env" "$HOME/.env" "$HOME/obsidian-web-mcp/.env" "$MCP_DIR/.env"; do
+  if [ -f "$p" ]; then
+    ENV_FILE="$(realpath "$p")"
+    break
+  fi
+done
+
+if [ -n "$ENV_FILE" ]; then
+    echo "Caricamento chiavi e ambiente da: $ENV_FILE"
+    set -a
+    source <(cat "$ENV_FILE" | tr -d '\r')
+    set +a
+else
+    echo "ATTENZIONE: Nessun file .env trovato!"
+fi
+
 MOUNT_DIR="/mnt/obsidian-vault"
 BUCKET_NAME="${R2_BUCKET_NAME:-obsidian-vault-bucket}"
 MCP_DIR="$HOME_DIR/obsidian-web-mcp" # Assumendo che ci sia la cartella del progetto
@@ -72,6 +89,7 @@ Group=$APP_GROUP
 WorkingDirectory=$MCP_DIR
 # Eseguiamo il server node/python sulla porta 8420 e puntandolo alla cartella di Rclone
 ExecStart=/usr/bin/env npm start
+EnvironmentFile=$ENV_FILE
 Environment=PORT=8420
 Environment=OBSIDIAN_DIR=$MOUNT_DIR
 Restart=on-failure

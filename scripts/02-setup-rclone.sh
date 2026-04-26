@@ -5,18 +5,33 @@ set -euo pipefail
 # ISTRUZIONI (DA ESEGUIRE SULLA VM):
 # 1. Connettiti alla VM via SSH (`gcloud compute ssh obsidian-mcp-vm`)
 # 2. Clona questo repository o copia solo questi script
-# 3. Imposta le tue chiavi Cloudflare R2 nell'ambiente:
+# Imposta le tue chiavi Cloudflare R2 nel file `.env` alla radice del repository:
 #
-# export R2_ACCESS_KEY_ID="tuo-access-key"
-# export R2_SECRET_ACCESS_KEY="tuo-secret-key"
-# export R2_ACCOUNT_ID="tuo-account-id"
-# export R2_BUCKET_NAME="tuo-bucket"
-#
-# (In alternativa puoi modificare questo script inserendole qui sotto)
+# R2_ACCESS_KEY_ID="tuo-access-key"
+# R2_SECRET_ACCESS_KEY="tuo-secret-key"
+# R2_ACCOUNT_ID="tuo-account-id"
+# R2_BUCKET_NAME="tuo-bucket"
 # ==============================================================================
 
+ENV_FILE=""
+for p in "./.env" "../.env" "$(dirname "$0")/../.env" "$(dirname "$0")/.env" "$HOME/.env" "$HOME/obsidian-web-mcp/.env"; do
+  if [ -f "$p" ]; then
+    ENV_FILE="$p"
+    break
+  fi
+done
+
+if [ -n "$ENV_FILE" ]; then
+    echo "Caricamento chiavi e ambiente da: $ENV_FILE"
+    set -a
+    source <(cat "$ENV_FILE" | tr -d '\r')
+    set +a
+else
+    echo "ATTENZIONE: Nessun file .env trovato, procedo con environment nudo."
+fi
+
 if [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ] || [ -z "${R2_ACCOUNT_ID:-}" ]; then
-  echo "ERRORE: Le variabili R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID devono essere impostate."
+  echo "ERRORE: Le variabili R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID devono essere impostate nel file .env"
   exit 1
 fi
 
