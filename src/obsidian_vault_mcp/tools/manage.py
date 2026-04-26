@@ -4,6 +4,7 @@ import json
 import logging
 
 from ..vault import list_directory, move_path, delete_path, resolve_vault_path
+from ..rclone_sync import push_file, push_deleted
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
     """Move a file or directory within the vault."""
     try:
         moved = move_path(source, destination, create_dirs=create_dirs)
+        if moved:
+            push_file(destination)
         return json.dumps({"source": source, "destination": destination, "moved": moved})
     except ValueError as e:
         return json.dumps({"error": str(e), "source": source, "destination": destination})
@@ -56,6 +59,8 @@ def vault_delete(path: str, confirm: bool = False) -> str:
 
     try:
         deleted = delete_path(path)
+        if deleted:
+            push_deleted(path)
         return json.dumps({"path": path, "deleted": deleted})
     except ValueError as e:
         return json.dumps({"error": str(e), "path": path})

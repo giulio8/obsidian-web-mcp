@@ -6,6 +6,7 @@ import logging
 import frontmatter
 
 from ..vault import resolve_vault_path, read_file, write_file_atomic
+from ..rclone_sync import push_file
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
                 logger.warning(f"Frontmatter merge failed for {path}, writing as-is: {e}")
 
         is_new, size = write_file_atomic(path, content, create_dirs=create_dirs)
-
+        push_file(path)
         return json.dumps({"path": path, "created": is_new, "size": size})
     except ValueError as e:
         return json.dumps({"error": str(e), "path": path})
@@ -58,6 +59,7 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
 
             new_content = frontmatter.dumps(post)
             write_file_atomic(file_path, new_content, create_dirs=False)
+            push_file(file_path)
 
             results.append({"path": file_path, "updated": True})
         except FileNotFoundError:
