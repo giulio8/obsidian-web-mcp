@@ -65,7 +65,7 @@ ExecStart=/usr/bin/rclone mount obsidian-r2:$BUCKET_NAME $MOUNT_DIR \\
   --vfs-cache-max-size 5G \\
   --allow-other \\
   --log-level INFO
-ExecStop=/bin/fusermount -uz $MOUNT_DIR
+ExecStop=fusermount3 -uz $MOUNT_DIR
 Restart=on-failure
 RestartSec=10
 
