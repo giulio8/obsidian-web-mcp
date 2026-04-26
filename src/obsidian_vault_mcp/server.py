@@ -39,7 +39,7 @@ mcp = FastMCP(
     json_response=True,
     lifespan=lifespan,
     transport_security=TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
+        enable_dns_rebinding_protection=False,
         allowed_hosts=[
             "127.0.0.1:*",
             "localhost:*",
