@@ -15,6 +15,7 @@ fi
 APP_USER=${SUDO_USER:-$USER}
 APP_GROUP=$(id -gn $APP_USER)
 HOME_DIR=$(eval echo ~$APP_USER)
+MCP_DIR="$HOME_DIR/obsidian-web-mcp" # Definisci prima di usarlo
 
 ENV_FILE=""
 for p in "./.env" "../.env" "$(dirname "$0")/../.env" "$(dirname "$0")/.env" "$HOME/.env" "$HOME/obsidian-web-mcp/.env" "$MCP_DIR/.env"; do
@@ -35,7 +36,6 @@ fi
 
 MOUNT_DIR="/mnt/obsidian-vault"
 BUCKET_NAME="${R2_BUCKET_NAME:-obsidian-vault-bucket}"
-MCP_DIR="$HOME_DIR/obsidian-web-mcp" # Assumendo che ci sia la cartella del progetto
 
 echo "=== Creazione e abilitazione Servizi Systemd ==="
 
