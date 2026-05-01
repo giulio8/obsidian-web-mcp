@@ -34,8 +34,10 @@ INDEXED_EXTENSIONS = {".md"}
 # Directories to skip (mirrors vault.py EXCLUDED_DIRS)
 EXCLUDED_DIRS = {".obsidian", ".trash", ".git", ".DS_Store", "__pycache__"}
 
-# How many chunks to embed in a single Vertex AI call
-EMBED_BATCH_SIZE = 100
+# How many chunks to embed in a single Vertex AI call.
+# text-embedding-005 allows max 20k tokens TOTAL per batch.
+# With ~750 tokens/chunk average: 20 × 750 = 15k → safely under limit.
+EMBED_BATCH_SIZE = 20
 
 
 @dataclass

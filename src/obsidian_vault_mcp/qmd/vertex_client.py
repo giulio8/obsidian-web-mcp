@@ -72,8 +72,10 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
 
-    # Trim to safe length (≈2048 tokens × 4 chars/token)
-    trimmed = [t[:8000] for t in texts]
+    # Trim to safe length.
+    # text-embedding-005 supports 3072 tokens/text, but we cap at ~750 tokens
+    # (3000 chars) so a batch of 20 texts stays well under the 20k total limit.
+    trimmed = [t[:3000] for t in texts]
 
     model = _get_embed_client()
     all_embeddings: list[list[float]] = []
