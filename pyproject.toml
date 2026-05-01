@@ -9,7 +9,7 @@ dependencies = [
     "python-frontmatter>=1.1.0",
     "pydantic>=2.0",
     "watchdog>=4.0.0",
-    "google-cloud-aiplatform>=1.50",
+    "google-genai>=1.0",
     "sqlite-vec>=0.1",
 ]
 

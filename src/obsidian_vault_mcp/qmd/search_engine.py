@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -259,14 +260,23 @@ class HybridSearchEngine:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _safe_bm25(self, query: str, limit: int) -> list[dict]:
-        """BM25 search with FTS5 special-char escaping."""
+        """BM25 search with FTS5 special-char sanitisation.
+
+        FTS5 treats several chars as operators: " * ^ - + ( ) AND OR NOT.
+        Strip punctuation so we never hit a syntax error, then try a
+        quoted phrase first, falling back to individual AND'd terms.
+        """
+        # Remove chars that FTS5 parses as operators (keep letters, digits, spaces)
+        sanitised = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE).strip()
+        if not sanitised:
+            return []
+
         try:
-            # FTS5 interprets some chars as operators — escape by quoting
-            safe_query = f'"{query}"'
-            results = self.db.bm25_search(safe_query, limit)
+            # Quoted phrase search (exact word-order)
+            results = self.db.bm25_search(f'"{sanitised}"', limit)
             if not results:
-                # Fallback: try unquoted (handles single-word queries better)
-                results = self.db.bm25_search(query, limit)
+                # Fallback: AND of individual terms
+                results = self.db.bm25_search(sanitised, limit)
             return results
         except Exception as e:
             logger.warning(f"BM25 search failed for '{query}': {e}")

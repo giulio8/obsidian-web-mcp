@@ -1,16 +1,16 @@
-"""Vertex AI + Gemini client for QMD-Lite.
+"""Vertex AI + Gemini client for QMD-Lite (google-genai SDK).
 
-Wraps two Google Cloud APIs:
-  - Vertex AI text-embedding-005  → float vectors for semantic search
-  - Gemini 2.0 Flash              → query expansion (Phase 3)
+Wraps two Google Cloud APIs via the new `google-genai` SDK:
+  - text-embedding-005  → float vectors for semantic search
+  - gemini-2.0-flash    → query expansion (Phase 3)
+
+The `google-cloud-aiplatform` SDK's vertexai.language_models module was
+deprecated on June 24, 2025. This module uses the replacement SDK:
+  pip install google-genai
 
 Authentication: uses Application Default Credentials (ADC).
 On the GCP VM, the service account attached to the instance is used
 automatically — no explicit key file needed.
-
-Usage on VM setup:
-  gcloud auth application-default login   # only for local dev
-  # On VM: nothing needed, ADC picks up the SA automatically
 
 Cost reminder:
   text-embedding-005: $0.006 / 1M tokens
@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -34,34 +33,32 @@ _CHAT_MODEL = "gemini-2.0-flash"
 # Embedding dimensions for text-embedding-005
 EMBED_DIM = 768
 
-# Vertex AI batch limit
-_MAX_BATCH = 250
+# Vertex AI batch limit (250 texts, 20k tokens total)
+_MAX_BATCH = 20  # conservative to stay under 20k total tokens
 
 
-def _get_embed_client():
-    """Lazy-load the Vertex AI prediction client."""
+def _get_genai_client():
+    """Lazy-load the google-genai client configured for Vertex AI."""
     try:
-        import vertexai
-        from vertexai.language_models import TextEmbeddingModel
+        from google import genai  # type: ignore
 
         if not _PROJECT:
             raise EnvironmentError(
                 "GCP_PROJECT_ID not set. Add it to .env or export it."
             )
-        vertexai.init(project=_PROJECT, location=_REGION)
-        return TextEmbeddingModel.from_pretrained(_EMBED_MODEL)
+        return genai.Client(vertexai=True, project=_PROJECT, location=_REGION)
     except ImportError as e:
         raise ImportError(
-            "google-cloud-aiplatform not installed. "
-            "Run: uv add google-cloud-aiplatform"
+            "google-genai not installed. Run: uv add google-genai"
         ) from e
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Return embeddings for a list of texts.
 
-    Handles Vertex AI batch limit (250 per call) transparently.
-    Each text is trimmed to ~8000 chars to stay within the 2048 token limit.
+    Handles Vertex AI batch limit transparently.
+    Each text is trimmed to ~750 tokens (3000 chars) to stay within
+    the 20k token-per-batch limit when batching 20 texts.
 
     Args:
         texts: list of strings to embed
@@ -77,14 +74,17 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     # (3000 chars) so a batch of 20 texts stays well under the 20k total limit.
     trimmed = [t[:3000] for t in texts]
 
-    model = _get_embed_client()
+    client = _get_genai_client()
     all_embeddings: list[list[float]] = []
 
     for i in range(0, len(trimmed), _MAX_BATCH):
         batch = trimmed[i : i + _MAX_BATCH]
         try:
-            results = model.get_embeddings(batch)
-            all_embeddings.extend(r.values for r in results)
+            response = client.models.embed_content(
+                model=_EMBED_MODEL,
+                contents=batch,
+            )
+            all_embeddings.extend(e.values for e in response.embeddings)
             logger.debug(f"Embedded batch {i//_MAX_BATCH + 1}: {len(batch)} texts")
         except Exception as e:
             logger.error(f"Embedding batch {i} failed: {e}")
@@ -113,14 +113,7 @@ def expand_query(query: str) -> list[str]:
         list of query strings (original always included as first element)
     """
     try:
-        import vertexai
-        from vertexai.generative_models import GenerativeModel
-
-        if not _PROJECT:
-            return [query]
-
-        vertexai.init(project=_PROJECT, location=_REGION)
-        model = GenerativeModel(_CHAT_MODEL)
+        client = _get_genai_client()
 
         prompt = (
             "Generate 2 alternative phrasings of the following search query "
@@ -129,7 +122,10 @@ def expand_query(query: str) -> list[str]:
             f"Query: {query}"
         )
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=_CHAT_MODEL,
+            contents=prompt,
+        )
         alternatives = [
             line.strip()
             for line in response.text.strip().splitlines()
