@@ -1,4 +1,4 @@
-"""CLI script for QMD-Lite indexer.
+"""CLI scripts for QMD-Lite: indexer (qmd-index) and search tester (qmd-search).
 
 Usage (on the VM):
     uv run qmd-index              # incremental (default)
@@ -6,10 +6,9 @@ Usage (on the VM):
     uv run qmd-index --stats      # show DB stats only
     uv run qmd-index --no-embed   # index text only, skip Vertex AI embeddings
 
-Environment variables (loaded from .env automatically by systemd EnvironmentFile):
-    VAULT_PATH          - path to the mounted vault (required)
-    GCP_PROJECT_ID      - GCP project for Vertex AI (required for embedding)
-    GCP_REGION          - Vertex AI region (default: us-east1)
+    uv run qmd-search "come funzionano i Transformer?"   # hybrid (BM25 + vector)
+    uv run qmd-search "IPv6" --bm25                      # BM25 only, no API
+    uv run qmd-search "agenti AI" --top-k 10             # more results
 """
 
 from __future__ import annotations
@@ -96,3 +95,69 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# qmd-search  —  manual search testing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def search_main():
+    """Entry point for `uv run qmd-search`."""
+    _try_load_dotenv()
+
+    logging.basicConfig(
+        level=logging.WARNING,  # suppress debug noise during search
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+
+    parser = argparse.ArgumentParser(description="QMD-Lite hybrid search")
+    parser.add_argument("query", help="Search query")
+    parser.add_argument("--top-k", type=int, default=5, help="Number of results")
+    parser.add_argument(
+        "--bm25", action="store_true", help="BM25-only mode (no Vertex AI)"
+    )
+    parser.add_argument(
+        "--full-text", action="store_true", help="Print full chunk text instead of snippet"
+    )
+    args = parser.parse_args()
+
+    from obsidian_vault_mcp.qmd.db import QMDDatabase
+    from obsidian_vault_mcp.qmd.search_engine import HybridSearchEngine
+
+    with QMDDatabase() as db:
+        stats = db.stats()
+        if stats["chunks"] == 0:
+            print("[!] Index is empty. Run: uv run qmd-index --full --vault <path>")
+            sys.exit(1)
+
+        engine = HybridSearchEngine(db)
+
+        if args.bm25:
+            results = engine.bm25_only(args.query, top_k=args.top_k)
+        else:
+            from obsidian_vault_mcp.qmd.vertex_client import embed_query
+            results = engine.search(
+                args.query,
+                top_k=args.top_k,
+                embed_fn=embed_query,
+            )
+
+        if not results:
+            print(f"Nessun risultato per: {args.query!r}")
+            sys.exit(0)
+
+        print(f"\n── Risultati per: {args.query!r} ──\n")
+        for i, r in enumerate(results):
+            header = f" › {r.header_path}" if r.header_path else ""
+            sources = "+".join(r.sources) if r.sources else "?"
+            print(f"[{i+1}] {r.obsidian_link}{header}")
+            print(f"    score={r.score:.3f} ({sources})  —  {r.doc_title}")
+            body = r.text if args.full_text else r.snippet
+            for line in body.splitlines()[:8]:
+                print(f"    {line}")
+            print()
+
+
+if __name__ == "__main__":
+    search_main()

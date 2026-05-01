@@ -22,6 +22,7 @@ dev = [
 [project.scripts]
 vault-mcp = "obsidian_vault_mcp.server:main"
 qmd-index = "obsidian_vault_mcp.qmd.cli:main"
+qmd-search = "obsidian_vault_mcp.qmd.cli:search_main"
 
 [build-system]
 requires = ["hatchling"]
