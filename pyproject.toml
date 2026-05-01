@@ -9,6 +9,8 @@ dependencies = [
     "python-frontmatter>=1.1.0",
     "pydantic>=2.0",
     "watchdog>=4.0.0",
+    "google-cloud-aiplatform>=1.50",
+    "sqlite-vec>=0.1",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +21,7 @@ dev = [
 
 [project.scripts]
 vault-mcp = "obsidian_vault_mcp.server:main"
+qmd-index = "obsidian_vault_mcp.qmd.cli:main"
 
 [build-system]
 requires = ["hatchling"]
