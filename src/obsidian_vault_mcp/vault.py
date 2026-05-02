@@ -7,6 +7,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+import frontmatter as fm_lib
+
 from . import config
 
 
@@ -36,9 +38,35 @@ def resolve_vault_path(relative_path: str) -> Path:
     return resolved
 
 
+def _iso_now() -> str:
+    """Return the current UTC time as an ISO 8601 string."""
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
 def _iso_timestamp(ts: float) -> str:
     """Convert a Unix timestamp to an ISO 8601 string in UTC."""
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+
+def _inject_lifecycle_frontmatter(content: str, is_new: bool) -> str:
+    """Inject `created` (new files only) and `modified` (always) into frontmatter.
+
+    - `created`: set once on file creation, never overwritten afterwards.
+    - `modified`: updated on every write.
+    - `word_count` is intentionally NOT set here (inaccurate and adds noise).
+
+    If the file has no frontmatter block, one is prepended.
+    """
+    try:
+        post = fm_lib.loads(content)
+        now = _iso_now()
+        if is_new:
+            post.metadata.setdefault("created", now)
+        post.metadata["modified"] = now
+        return fm_lib.dumps(post)
+    except Exception:
+        # If parsing fails for any reason, return content unchanged
+        return content
 
 
 def read_file(relative_path: str) -> tuple[str, dict]:
@@ -79,6 +107,10 @@ def write_file_atomic(
 
     path = resolve_vault_path(relative_path)
     is_new = not path.exists()
+
+    # Auto-inject lifecycle metadata before writing
+    content = _inject_lifecycle_frontmatter(content, is_new)
+    encoded = content.encode("utf-8")
 
     if create_dirs:
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -55,8 +55,9 @@ mcp = FastMCP(
 
 from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
 from .tools.write import vault_write as _vault_write, vault_batch_frontmatter_update as _vault_batch_frontmatter_update
+from .tools.write_advanced import vault_patch as _vault_patch, vault_append as _vault_append, vault_batch_write as _vault_batch_write
 from .tools.search import vault_search as _vault_search, vault_search_frontmatter as _vault_search_frontmatter
-from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete
+from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete, vault_get_backlinks as _vault_get_backlinks
 from .models import (
     VaultReadInput,
     VaultWriteInput,
@@ -167,13 +168,79 @@ def vault_list(
 
 @mcp.tool(
     name="vault_move",
-    description="Move a file or directory within the vault. Validates both source and destination paths.",
+    description=(
+        "Move a file or directory within the vault. "
+        "With update_links=True (default), automatically rewrites all [[wikilinks]] "
+        "and markdown links pointing to the moved file using the in-memory link graph — "
+        "no vault scan needed. Mirrors Obsidian Desktop's auto-link-update behaviour."
+    ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
-def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
-    """Move a file or directory."""
+def vault_move(source: str, destination: str, create_dirs: bool = True, update_links: bool = True) -> str:
+    """Move a file or directory, optionally rewriting backlinks."""
     inp = VaultMoveInput(source=source, destination=destination, create_dirs=create_dirs)
-    return _vault_move(inp.source, inp.destination, inp.create_dirs)
+    return _vault_move(inp.source, inp.destination, inp.create_dirs, update_links)
+
+
+@mcp.tool(
+    name="vault_patch",
+    description=(
+        "Surgically replace a unique string in a vault file (works on frontmatter and body). "
+        "old_str must appear EXACTLY ONCE — if ambiguous, include more surrounding lines. "
+        "Returns a diff summary. Preferred over vault_write for targeted edits."
+    ),
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
+)
+def vault_patch(path: str, old_str: str, new_str: str) -> str:
+    """Surgical str_replace on a vault file."""
+    return _vault_patch(path, old_str, new_str)
+
+
+@mcp.tool(
+    name="vault_append",
+    description=(
+        "Append content to the end of a vault file, or insert it after a specific ## section heading. "
+        "Use for adding log entries, todo items, or new sections without rewriting the whole file. "
+        "Creates the file if it does not exist."
+    ),
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
+)
+def vault_append(
+    path: str,
+    content: str,
+    after_section: str | None = None,
+    create_if_missing: bool = True,
+) -> str:
+    """Append content to a vault file."""
+    return _vault_append(path, content, after_section, create_if_missing)
+
+
+@mcp.tool(
+    name="vault_batch_write",
+    description=(
+        "Create or update multiple vault files in a single call. "
+        "Each item needs 'path' and 'content'; optionally 'merge_frontmatter': true. "
+        "More efficient than calling vault_write repeatedly for bulk note creation."
+    ),
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
+)
+def vault_batch_write(files: list[dict]) -> str:
+    """Create or update multiple files at once."""
+    return _vault_batch_write(files)
+
+
+@mcp.tool(
+    name="vault_get_backlinks",
+    description=(
+        "Return all notes that link TO a given file (backlinks) and all notes "
+        "the file links to (forward links). Uses the in-memory link graph — O(1), no scan. "
+        "Use before vault_move to preview which notes will be updated."
+    ),
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+)
+def vault_get_backlinks(path: str) -> str:
+    """Inspect the link graph for a given note."""
+    return _vault_get_backlinks(path)
 
 
 @mcp.tool(
