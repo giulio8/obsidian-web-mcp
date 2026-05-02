@@ -138,3 +138,65 @@ def expand_query(query: str) -> list[str]:
     except Exception as e:
         logger.warning(f"Query expansion failed, using original: {e}")
         return [query]
+
+
+def rerank_chunks(query: str, chunks: list[str]) -> list[float]:
+    """Score each chunk for relevance to the query via Gemini Flash.
+
+    Asks the model to rate each (query, chunk) pair on a 0-1 scale.
+    This is the optional reranking step — only call it when the agent
+    signals that the query is complex or ambiguous.
+
+    Args:
+        query:  the original user query
+        chunks: list of chunk texts to score (typically top-30 from retrieval)
+
+    Returns:
+        list of float scores in [0, 1], parallel to the input chunks list.
+        Falls back to uniform 0.5 on error to avoid discarding results.
+    """
+    if not chunks:
+        return []
+
+    try:
+        client = _get_genai_client()
+
+        # Build a single prompt that scores all chunks in one call (cheaper)
+        items = "\n\n".join(
+            f"[{i}] {chunk[:800]}"  # trim each chunk to keep prompt manageable
+            for i, chunk in enumerate(chunks)
+        )
+
+        prompt = (
+            f"Query: {query}\n\n"
+            "For each numbered text chunk below, output a single decimal score "
+            "between 0.0 and 1.0 indicating how directly relevant it is to the query.\n"
+            "1.0 = answers the query directly, 0.0 = completely irrelevant.\n"
+            "Output ONLY a JSON array of numbers, one per chunk, in the same order. "
+            "No explanation.\n\n"
+            f"{items}"
+        )
+
+        response = client.models.generate_content(
+            model=_CHAT_MODEL,
+            contents=prompt,
+        )
+
+        import json
+        raw = response.text.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        scores = json.loads(raw.strip())
+
+        if not isinstance(scores, list) or len(scores) != len(chunks):
+            raise ValueError(f"Unexpected reranker output: {scores!r}")
+
+        # Clamp to [0, 1]
+        return [max(0.0, min(1.0, float(s))) for s in scores]
+
+    except Exception as e:
+        logger.warning(f"Reranking failed: {e}. Falling back to uniform score.")
+        return [0.5] * len(chunks)

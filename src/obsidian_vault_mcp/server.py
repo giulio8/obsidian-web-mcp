@@ -187,6 +187,102 @@ def vault_delete(path: str, confirm: bool = False) -> str:
     return _vault_delete(inp.path, inp.confirm)
 
 
+@mcp.tool(
+    name="query_vault",
+    description=(
+        "Hybrid semantic + keyword search across the Obsidian Knowledge Base. "
+        "Combines BM25 full-text search with vector similarity (Vertex AI embeddings) "
+        "and Reciprocal Rank Fusion for high-quality retrieval. "
+        "Use this as the PRIMARY method to find relevant notes — prefer it over vault_search "
+        "for any conceptual or open-ended question. "
+        "Set rerank=True when the query is complex, ambiguous, or multi-concept (adds ~2s latency). "
+        "Set rerank=False (default) for simple keyword lookups."
+    ),
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+)
+def query_vault(
+    query: str,
+    top_k: int = 5,
+    rerank: bool = False,
+    expand: bool = True,
+    path_filter: str | None = None,
+) -> str:
+    """Hybrid semantic search over the vault Knowledge Base.
+
+    Args:
+        query:       Natural language query or keyword string.
+        top_k:       Number of results to return (default 5, max 20).
+        rerank:      If True, use Gemini Flash to re-score the top candidates.
+                     Enable for complex/ambiguous queries. Adds ~2s latency.
+        expand:      If True (default), generate 1-2 query variants via Gemini
+                     to improve recall for paraphrased concepts.
+        path_filter: Optional vault-relative path prefix to restrict search
+                     (e.g. 'projects/' to search only the projects folder).
+    """
+    import json
+    from .qmd.db import QMDDatabase
+    from .qmd.search_engine import HybridSearchEngine
+    from .qmd.vertex_client import embed_query, expand_query, rerank_chunks
+
+    top_k = max(1, min(top_k, 20))  # clamp
+
+    try:
+        with QMDDatabase() as db:
+            stats = db.stats()
+            if stats["chunks"] == 0:
+                return json.dumps({
+                    "error": "QMD index is empty. Run: uv run qmd-index --full --vault <path>",
+                    "results": [],
+                })
+
+            engine = HybridSearchEngine(db)
+
+            # Query expansion: generate alternative phrasings for better recall
+            queries = expand_query(query) if expand else None
+
+            # Reranker: only wire it up if the agent requested it
+            rerank_fn = rerank_chunks if rerank else None
+
+            results = engine.search(
+                query=query,
+                top_k=top_k,
+                queries=queries[1:] if queries else None,  # extras only, primary is first
+                embed_fn=embed_query,
+                rerank_fn=rerank_fn,
+            )
+
+            # Apply path filter post-retrieval (simple prefix match)
+            if path_filter:
+                results = [r for r in results if r.doc_path.startswith(path_filter)]
+
+            output = [
+                {
+                    "rank": i + 1,
+                    "score": round(r.score, 4),
+                    "path": r.doc_path,
+                    "title": r.doc_title,
+                    "section": r.header_path,
+                    "obsidian_link": r.obsidian_link,
+                    "snippet": r.snippet,
+                    "sources": r.sources,
+                }
+                for i, r in enumerate(results)
+            ]
+
+            return json.dumps({
+                "query": query,
+                "expanded_queries": queries[1:] if queries else [],
+                "reranked": rerank,
+                "total": len(output),
+                "index_stats": {"chunks": stats["chunks"], "documents": stats["documents"]},
+                "results": output,
+            }, ensure_ascii=False)
+
+    except Exception as e:
+        logger.error(f"query_vault error: {e}")
+        return json.dumps({"error": str(e), "results": []})
+
+
 def main():
     """Entry point. Run with streamable HTTP transport."""
     logging.basicConfig(
