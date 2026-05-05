@@ -37,6 +37,8 @@ if [ -z "${DUCKDNS_TOKEN:-}" ]; then
 fi
 
 MCP_PORT="${VAULT_MCP_PORT:-8420}"
+# Strip .duckdns.org suffix if the user pasted the full hostname instead of just the subdomain
+DUCKDNS_SUBDOMAIN="${DUCKDNS_SUBDOMAIN%.duckdns.org}"
 HOSTNAME="${DUCKDNS_SUBDOMAIN}.duckdns.org"
 
 echo ""
