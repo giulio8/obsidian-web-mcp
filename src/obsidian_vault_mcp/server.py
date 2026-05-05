@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from .config import VAULT_MCP_PORT, VAULT_MCP_TOKEN, VAULT_PATH
+from .config import VAULT_MCP_PORT, VAULT_MCP_TOKEN, VAULT_MCP_HOST, VAULT_MCP_HOSTNAME, VAULT_PATH
 from .frontmatter_index import FrontmatterIndex
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,12 @@ async def lifespan(server):
     logger.info("Vault MCP server shut down.")
 
 
+# Build allowed_hosts: always include localhost variants; add public hostname if configured
+_allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+if VAULT_MCP_HOSTNAME:
+    _allowed_hosts.append(VAULT_MCP_HOSTNAME)
+    _allowed_hosts.append(f"{VAULT_MCP_HOSTNAME}:443")
+
 # Create the MCP server
 mcp = FastMCP(
     "obsidian_web_mcp",
@@ -40,13 +46,7 @@ mcp = FastMCP(
     lifespan=lifespan,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
-        allowed_hosts=[
-            "127.0.0.1:*",
-            "localhost:*",
-            "[::1]:*",
-            # Add your tunnel hostname here, e.g.:
-            # "vault-mcp.example.com",
-        ],
+        allowed_hosts=_allowed_hosts,
     ),
 )
 
@@ -382,7 +382,7 @@ def main():
         import uvicorn
         uvicorn.run(
             app,
-            host="0.0.0.0",
+            host=VAULT_MCP_HOST,
             port=VAULT_MCP_PORT,
             log_level="info",
             proxy_headers=True,

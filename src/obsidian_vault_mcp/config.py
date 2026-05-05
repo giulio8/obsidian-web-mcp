@@ -5,6 +5,11 @@ from pathlib import Path
 VAULT_PATH = Path(os.environ.get("VAULT_PATH", os.path.expanduser("~/Obsidian/MyVault")))
 VAULT_MCP_TOKEN = os.environ.get("VAULT_MCP_TOKEN", "")
 VAULT_MCP_PORT = int(os.environ.get("VAULT_MCP_PORT", "8420"))
+# Public hostname served by Caddy (e.g. obsidian-mcp.duckdns.org).
+# Used to populate TransportSecuritySettings.allowed_hosts.
+VAULT_MCP_HOSTNAME = os.environ.get("VAULT_MCP_HOSTNAME", "")
+# Bind address for uvicorn. Set to 127.0.0.1 after Caddy is in front.
+VAULT_MCP_HOST = os.environ.get("VAULT_MCP_HOST", "0.0.0.0")
 
 # OAuth 2.0 client credentials (for Claude app integration)
 VAULT_OAUTH_CLIENT_ID = os.environ.get("VAULT_OAUTH_CLIENT_ID", "vault-mcp-client")
