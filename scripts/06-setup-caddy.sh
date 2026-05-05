@@ -45,8 +45,20 @@ echo "  hostname : ${HOSTNAME}"
 echo "  upstream : 127.0.0.1:${MCP_PORT}"
 echo ""
 
-# ── 1. Installa Caddy ─────────────────────────────────────────────────────────
-echo "=== 1. Installa Caddy ==="
+# ── 1. Ferma eventuali web server che occupano la porta 80 ────────────────────
+echo "=== 1. Libero la porta 80 ==="
+for SVC in apache2 nginx lighttpd; do
+    if systemctl is-active --quiet "${SVC}" 2>/dev/null; then
+        echo "Fermo ${SVC}..."
+        sudo systemctl stop "${SVC}"
+        sudo systemctl disable "${SVC}"
+        echo "${SVC} fermato e disabilitato."
+    fi
+done
+
+# ── 2. Installa Caddy ─────────────────────────────────────────────────────────
+echo ""
+echo "=== 2. Installa Caddy ==="
 if command -v caddy &>/dev/null; then
     echo "Caddy già installato: $(caddy version)"
 else
