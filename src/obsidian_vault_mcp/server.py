@@ -43,7 +43,6 @@ mcp = FastMCP(
     "obsidian_web_mcp",
     stateless_http=True,
     json_response=True,
-    lifespan=lifespan,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
         allowed_hosts=_allowed_hosts,
@@ -378,6 +377,9 @@ def main():
 
         app.add_middleware(BearerAuthMiddleware)
         logger.info(f"Starting server on port {VAULT_MCP_PORT} with bearer auth + OAuth")
+        
+        logger.info(f"Avvio indicizzazione globale del Vault: {VAULT_PATH}")
+        frontmatter_index.start()
 
         import uvicorn
         uvicorn.run(
