@@ -78,12 +78,22 @@ fi
 echo ""
 echo "=== 2. Configuro Caddyfile ==="
 sudo tee /etc/caddy/Caddyfile > /dev/null <<EOF
+{
+    servers {
+        timeouts {
+            idle 0s
+        }
+    }
+}
+
 # Obsidian MCP — HTTPS reverse proxy
 # Caddy gestisce automaticamente il certificato Let's Encrypt
 
 ${HOSTNAME} {
     # Forwarding al server MCP locale
-    reverse_proxy 127.0.0.1:${MCP_PORT}
+    reverse_proxy 127.0.0.1:${MCP_PORT} {
+        flush_interval -1
+    }
 
     # Log compatti
     log {
