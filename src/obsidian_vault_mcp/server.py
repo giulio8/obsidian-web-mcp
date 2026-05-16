@@ -14,11 +14,15 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from .config import VAULT_MCP_PORT, VAULT_MCP_TOKEN, VAULT_MCP_HOST, VAULT_MCP_HOSTNAME, VAULT_PATH
 from .frontmatter_index import FrontmatterIndex
+from .access_tracker import AccessTracker
 
 logger = logging.getLogger(__name__)
 
 # Global frontmatter index instance
 frontmatter_index = FrontmatterIndex()
+
+# Global access tracker for Ebbinghaus retention scoring
+access_tracker = AccessTracker()
 
 
 @asynccontextmanager
@@ -78,7 +82,12 @@ from .models import (
 def vault_read(path: str) -> str:
     """Read a file from the vault."""
     inp = VaultReadInput(path=path)
-    return _vault_read(inp.path)
+    result = _vault_read(inp.path)
+    try:
+        access_tracker.record(inp.path, source="read")
+    except Exception:
+        pass  # tracking must never break reads
+    return result
 
 
 @mcp.tool(
@@ -89,7 +98,12 @@ def vault_read(path: str) -> str:
 def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
     """Read multiple files at once."""
     inp = VaultBatchReadInput(paths=paths, include_content=include_content)
-    return _vault_batch_read(inp.paths, inp.include_content)
+    result = _vault_batch_read(inp.paths, inp.include_content)
+    try:
+        access_tracker.record_batch(inp.paths, source="batch_read")
+    except Exception:
+        pass  # tracking must never break reads
+    return result
 
 
 @mcp.tool(
@@ -335,6 +349,14 @@ def query_vault(
                 for i, r in enumerate(results)
             ]
 
+            # Track accessed paths for retention scoring
+            try:
+                accessed_paths = list({r.doc_path for r in results})
+                if accessed_paths:
+                    access_tracker.record_batch(accessed_paths, source="query")
+            except Exception:
+                pass  # tracking must never break queries
+
             return json.dumps({
                 "query": query,
                 "expanded_queries": queries[1:] if queries else [],
@@ -380,6 +402,10 @@ def main():
         
         logger.info(f"Avvio indicizzazione globale del Vault: {VAULT_PATH}")
         frontmatter_index.start()
+
+        # Start access tracker for retention scoring
+        access_tracker.open()
+        logger.info(f"Access tracker avviato: {access_tracker.stats()}")
 
         import uvicorn
         uvicorn.run(
