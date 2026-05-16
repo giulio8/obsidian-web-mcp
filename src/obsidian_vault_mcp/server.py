@@ -413,6 +413,91 @@ def query_vault(
         return json.dumps({"error": str(e), "results": []})
 
 
+@mcp.tool(
+    name="vault_save_reference",
+    description="Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /References/, aggiornando l'indice.",
+)
+def vault_save_reference(url: str, title_override: str | None = None) -> str:
+    import json
+    import time
+    from slugify import slugify
+    import trafilatura
+    import frontmatter
+    from .qmd.db import QMDDatabase
+    from .qmd.indexer import VaultIndexer
+
+    try:
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            return json.dumps({"error": f"Failed to download URL: {url}"})
+
+        # Extract markdown, include links, no images to keep it clean
+        extracted = trafilatura.extract(
+            downloaded,
+            output_format="markdown",
+            include_links=True,
+            include_images=False,
+            include_formatting=True
+        )
+        if not extracted:
+            return json.dumps({"error": "Failed to extract content (maybe not an article?)"})
+
+        metadata = trafilatura.extract_metadata(downloaded)
+        title = title_override or (metadata.title if metadata and metadata.title else "Untitled Reference")
+        
+        # Build frontmatter
+        post = frontmatter.Post(extracted)
+        post.metadata["type"] = "reference"
+        post.metadata["url"] = url
+        post.metadata["saved_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        post.metadata["title"] = title
+        if metadata and metadata.author:
+            post.metadata["author"] = metadata.author
+        if metadata and metadata.date:
+            post.metadata["published_date"] = metadata.date
+
+        # Slugify title for filename
+        slug = slugify(title, max_length=60)
+        if not slug:
+            slug = str(int(time.time()))
+            
+        file_name = f"{slug}.md"
+        references_dir = VAULT_PATH / "References"
+        references_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_path = references_dir / file_name
+        
+        # Avoid overwriting existing references with the same slug by appending timestamp
+        if file_path.exists():
+            file_name = f"{slug}-{int(time.time())}.md"
+            file_path = references_dir / file_name
+
+        file_path.write_text(frontmatter.dumps(post), encoding="utf-8")
+        
+        # Re-index only the new file via delta
+        try:
+            with QMDDatabase() as db:
+                indexer = VaultIndexer(VAULT_PATH, db, embed=True)
+                indexer.run_delta()
+        except Exception as e:
+            logger.warning(f"Indexing failed for new reference: {e}")
+            return json.dumps({
+                "success": True,
+                "path": f"References/{file_name}",
+                "warning": f"Saved, but indexing failed: {e}"
+            })
+
+        return json.dumps({
+            "success": True,
+            "path": f"References/{file_name}",
+            "title": title
+        })
+
+    except Exception as e:
+        logger.error(f"vault_save_reference error: {e}")
+        return json.dumps({"error": str(e)})
+
+
 def main():
     """Entry point. Run with streamable HTTP transport."""
     logging.basicConfig(
