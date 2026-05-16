@@ -228,3 +228,63 @@ def vault_batch_write(files: list[dict]) -> str:
         "failed": failed,
         "results": results,
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# vault_extract_to_new_note
+# ─────────────────────────────────────────────────────────────────────────────
+
+def vault_extract_to_new_note(
+    source_path: str,
+    selection_to_extract: str,
+    new_note_path: str,
+    new_note_content: str | None = None
+) -> str:
+    """Extract text from one note, replace with wikilink, and create a new atomic note.
+
+    Args:
+        source_path:          Vault-relative path to the file to extract from.
+        selection_to_extract: Exact string to find and replace.
+        new_note_path:        Vault-relative path for the new note (e.g. 'Concepts/My_Note.md').
+        new_note_content:     Optional content for the new note. If None, uses the extracted text directly.
+    """
+    try:
+        content, _ = read_file(source_path)
+    except FileNotFoundError:
+        return json.dumps({"error": f"Source file not found: {source_path}"})
+
+    if selection_to_extract not in content:
+        return json.dumps({
+            "error": "selection_to_extract not found in source file. Check for whitespace differences.",
+            "path": source_path,
+        })
+    
+    # We replace only the first occurrence
+    if content.count(selection_to_extract) > 1:
+        return json.dumps({
+            "error": "selection_to_extract appears multiple times. Add more surrounding context to make it unique.",
+            "path": source_path,
+        })
+
+    basename = Path(new_note_path).stem
+    new_source_content = content.replace(selection_to_extract, f"[[{basename}]]", 1)
+    final_new_note_content = new_note_content if new_note_content is not None else selection_to_extract
+
+    try:
+        # Write to source note
+        write_file_atomic(source_path, new_source_content)
+        push_file(source_path)
+        
+        # Write the new note
+        is_new, size = write_file_atomic(new_note_path, final_new_note_content, create_dirs=True)
+        push_file(new_note_path)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+    return json.dumps({
+        "extracted": True,
+        "source_path": source_path,
+        "new_note_path": new_note_path,
+        "new_note_created": is_new,
+        "size": size,
+    })

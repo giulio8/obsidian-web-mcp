@@ -58,7 +58,7 @@ mcp = FastMCP(
 
 from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
 from .tools.write import vault_write as _vault_write, vault_batch_frontmatter_update as _vault_batch_frontmatter_update
-from .tools.write_advanced import vault_patch as _vault_patch, vault_append as _vault_append, vault_batch_write as _vault_batch_write
+from .tools.write_advanced import vault_patch as _vault_patch, vault_append as _vault_append, vault_batch_write as _vault_batch_write, vault_extract_to_new_note as _vault_extract_to_new_note
 from .tools.search import vault_search as _vault_search, vault_search_frontmatter as _vault_search_frontmatter
 from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete, vault_get_backlinks as _vault_get_backlinks
 from .models import (
@@ -108,7 +108,10 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
 
 @mcp.tool(
     name="vault_write",
-    description="Write a file to the Obsidian vault. Supports frontmatter merging with existing files. Creates parent directories by default.",
+    description=(
+        "Write a file to the Obsidian vault. Supports frontmatter merging with existing files. Creates parent directories by default. "
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
+    ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
@@ -214,7 +217,8 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
     description=(
         "Append content to the end of a vault file, or insert it after a specific ## section heading. "
         "Use for adding log entries, todo items, or new sections without rewriting the whole file. "
-        "Creates the file if it does not exist."
+        "Creates the file if it does not exist. "
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
     ),
     annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
 )
@@ -233,13 +237,28 @@ def vault_append(
     description=(
         "Create or update multiple vault files in a single call. "
         "Each item needs 'path' and 'content'; optionally 'merge_frontmatter': true. "
-        "More efficient than calling vault_write repeatedly for bulk note creation."
+        "More efficient than calling vault_write repeatedly for bulk note creation. "
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_batch_write(files: list[dict]) -> str:
     """Create or update multiple files at once."""
     return _vault_batch_write(files)
+
+
+@mcp.tool(
+    name="vault_extract_to_new_note",
+    description=(
+        "Surgically extract text from one note, replace it with a [[wikilink]], and create a new atomic note. "
+        "Use this for Zettelkasten refactoring when a note becomes too monolithic. "
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
+    ),
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
+)
+def vault_extract_to_new_note(source_path: str, selection_to_extract: str, new_note_path: str, new_note_content: str | None = None) -> str:
+    """Extract text to a new atomic note and link it."""
+    return _vault_extract_to_new_note(source_path, selection_to_extract, new_note_path, new_note_content)
 
 
 @mcp.tool(
@@ -417,12 +436,7 @@ def query_vault(
     name="vault_save_reference",
     description=(
         "Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /References/, aggiornando l'indice. "
-        "CRITICAL AGENT INSTRUCTION (Memory Consolidation Protocol): "
-        "Dopo aver usato questo tool, DEVI sempre: "
-        "1. Leggere la reference appena salvata. "
-        "2. Sintetizzare i concetti chiave estraendoli in una o più note atomiche dentro /Concepts/ usando vault_write. "
-        "3. Collegare le note atomiche alla reference tramite [[wikilinks]]. "
-        "4. Documentare il tuo ragionamento in un log dentro /Episodic/."
+        "ATTENZIONE: Prima di operare, DEVI leggere le policy in _Meta/agent.md"
     )
 )
 def vault_save_reference(url: str, title_override: str | None = None) -> str:
