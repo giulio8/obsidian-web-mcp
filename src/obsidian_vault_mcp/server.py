@@ -520,6 +520,25 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
         return json.dumps({"error": str(e)})
 
 
+@mcp.tool(
+    name="vault_sync_context",
+    description="Sincronizza lo stato locale della base di conoscenza con le fonti esterne per garantire la coerenza dei dati."
+)
+def vault_sync_context() -> str:
+    """Forza l'aggiornamento della cache del vault sincronizzando con il cloud."""
+    from .rclone_sync import sync_vault
+    if sync_vault():
+        return json.dumps({
+            "success": True,
+            "message": "Sincronizzazione completata con successo. La base di conoscenza è ora aggiornata."
+        })
+    else:
+        return json.dumps({
+            "success": False,
+            "error": "Errore durante la sincronizzazione della base di conoscenza. Verificare i log del server."
+        })
+
+
 def main():
     """Entry point. Run with streamable HTTP transport."""
     logging.basicConfig(

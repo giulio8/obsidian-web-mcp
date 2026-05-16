@@ -78,3 +78,33 @@ def push_deleted(vault_relative_path: str) -> None:
     # nuova posizione nel cestino
     trash_path = f".trash/{Path(vault_relative_path).name}"
     push_file(trash_path)
+
+
+def sync_vault() -> bool:
+    """Forza una sincronizzazione del vault da R2.
+    
+    Utile quando si sa che sono state fatte modifiche esterne che il mount
+    potrebbe non aver ancora rilevato a causa del caching della directory.
+    """
+    try:
+        # Usiamo sync per allineare il mount point con R2
+        from .config import VAULT_RCLONE_PREFIX, VAULT_PATH
+        import subprocess
+        
+        remote = _get_remote()
+        if VAULT_RCLONE_PREFIX:
+            remote = f"{remote}/{VAULT_RCLONE_PREFIX}"
+        
+        # Sincronizza R2 -> Local (Mount)
+        # Usiamo --no-update-modtime per evitare conflitti con il mount
+        result = subprocess.run(
+            ["rclone", "sync", remote, str(VAULT_PATH)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        logger.info("Sincronizzazione esterna completata con successo")
+        return True
+    except Exception as e:
+        logger.error(f"Errore durante la sincronizzazione: {e}")
+        return False
