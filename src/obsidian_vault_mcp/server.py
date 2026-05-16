@@ -324,12 +324,18 @@ def query_vault(
             # Reranker: only wire it up if the agent requested it
             rerank_fn = rerank_chunks if rerank else None
 
+            def get_links(p: str) -> tuple[set[str], set[str]]:
+                fwd = frontmatter_index.get_forward_links(p)
+                back = frontmatter_index.get_backlinks(p)
+                return fwd, back
+
             results = engine.search(
                 query=query,
                 top_k=top_k,
                 queries=queries[1:] if queries else None,  # extras only, primary is first
                 embed_fn=embed_query,
                 rerank_fn=rerank_fn,
+                get_links_fn=get_links,
             )
 
             # ── Retention scoring (Lazy Ebbinghaus) ──────────────────────────

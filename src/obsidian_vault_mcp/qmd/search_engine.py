@@ -82,6 +82,7 @@ class HybridSearchEngine:
         queries: list[str] | None = None,
         embed_fn: Callable[[str], list[float]] | None = None,
         rerank_fn: Callable[[str, list[str]], list[float]] | None = None,
+        get_links_fn: Callable[[str], tuple[set[str], set[str]]] | None = None,
         bm25_limit: int = 30,
         vector_limit: int = 30,
     ) -> list[SearchResult]:
@@ -94,6 +95,8 @@ class HybridSearchEngine:
                           If None, only the primary query is used.
             embed_fn:     Function(text) → vector. If None, vector search is skipped.
             rerank_fn:    Function(query, [texts]) → [score]. Optional reranker.
+            get_links_fn: Function(path) → (forward_links, backlinks). If provided,
+                          adds a third graph-based stream expanding from top hits.
             bm25_limit:   How many BM25 candidates to gather per query variant
             vector_limit: How many vector candidates to gather per query variant
 
@@ -103,7 +106,7 @@ class HybridSearchEngine:
         all_queries = [query] + (queries or [])
 
         # Collect ranked lists from each backend for each query variant
-        ranked_lists: list[tuple[list[dict], float]] = []  # (results, weight)
+        ranked_lists: list[tuple[list[dict], float, str]] = []  # (results, weight, source_tag)
 
         for i, q in enumerate(all_queries):
             weight = 2.0 if i == 0 else 1.0  # primary query gets double weight
@@ -111,7 +114,7 @@ class HybridSearchEngine:
             # BM25 search
             bm25_results = self._safe_bm25(q, bm25_limit)
             if bm25_results:
-                ranked_lists.append((bm25_results, weight))
+                ranked_lists.append((bm25_results, weight, "bm25"))
                 logger.debug(f"BM25[{i}] '{q[:40]}': {len(bm25_results)} results")
 
             # Vector search (only if embedding function provided)
@@ -120,7 +123,7 @@ class HybridSearchEngine:
                     vec = embed_fn(q)
                     vector_results = self.db.vector_search(vec, vector_limit)
                     if vector_results:
-                        ranked_lists.append((vector_results, weight))
+                        ranked_lists.append((vector_results, weight, "vec"))
                         logger.debug(
                             f"Vec[{i}] '{q[:40]}': {len(vector_results)} results"
                         )
@@ -130,6 +133,41 @@ class HybridSearchEngine:
         if not ranked_lists:
             logger.warning("No results from any backend")
             return []
+
+        # Graph search (third stream, expanding from top semantic/keyword hits)
+        if get_links_fn is not None:
+            try:
+                seed_paths = []
+                # Collect top 3 unique documents from each existing stream as seeds
+                for res_list, _, _ in ranked_lists:
+                    for r in res_list[:3]:
+                        if r["doc_path"] not in seed_paths:
+                            seed_paths.append(r["doc_path"])
+
+                neighbor_scores: dict[str, float] = {}
+                for path in seed_paths:
+                    fwd, back = get_links_fn(path)
+                    for n in (fwd | back):
+                        neighbor_scores[n] = neighbor_scores.get(n, 0.0) + 1.0
+
+                if neighbor_scores:
+                    # Sort neighbors by connectivity score and take top 30
+                    top_neighbors = sorted(neighbor_scores.items(), key=lambda x: x[1], reverse=True)[:30]
+                    neighbor_paths = [p for p, _ in top_neighbors]
+                    
+                    chunks = self.db.get_first_chunks_by_paths(neighbor_paths)
+                    graph_results = []
+                    for chunk in chunks:
+                        chunk["score"] = neighbor_scores.get(chunk["doc_path"], 0.0)
+                        graph_results.append(chunk)
+
+                    if graph_results:
+                        graph_results.sort(key=lambda x: x["score"], reverse=True)
+                        # Give graph stream weight = 1.0 (same as expansion streams)
+                        ranked_lists.append((graph_results, 1.0, "graph"))
+                        logger.debug(f"Graph: {len(graph_results)} results from {len(seed_paths)} seeds")
+            except Exception as e:
+                logger.warning(f"Graph search failed: {e}")
 
         # RRF Fusion
         fused = self._rrf_fuse(ranked_lists)
@@ -175,12 +213,12 @@ class HybridSearchEngine:
     # ── RRF Fusion ────────────────────────────────────────────────────────────
 
     def _rrf_fuse(
-        self, ranked_lists: list[tuple[list[dict], float]]
+        self, ranked_lists: list[tuple[list[dict], float, str]]
     ) -> dict[int, dict]:
         """Reciprocal Rank Fusion across multiple ranked result lists.
 
         Args:
-            ranked_lists: list of (results, weight) pairs.
+            ranked_lists: list of (results, weight, source_tag) tuples.
                           Each result dict must have a 'chunk_id' key.
 
         Returns:
@@ -189,7 +227,7 @@ class HybridSearchEngine:
         scores: dict[int, float] = {}
         merged: dict[int, dict] = {}
 
-        for results, weight in ranked_lists:
+        for results, weight, source_tag in ranked_lists:
             for rank, item in enumerate(results):
                 cid = item["chunk_id"]
                 rrf = weight / (RRF_K + rank + 1)
@@ -204,7 +242,6 @@ class HybridSearchEngine:
                     merged[cid] = {**item, "sources": []}
 
                 # Track which backends found this chunk
-                source_tag = "bm25" if "score" in item and item["score"] > 0 else "vec"
                 if source_tag not in merged[cid]["sources"]:
                     merged[cid]["sources"].append(source_tag)
 

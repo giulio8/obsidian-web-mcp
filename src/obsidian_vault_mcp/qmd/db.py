@@ -272,6 +272,31 @@ class QMDDatabase:
     def commit(self) -> None:
         self.conn.commit()
 
+    def get_first_chunks_by_paths(self, paths: list[str]) -> list[dict]:
+        """Fetch the first chunk (chunk_index=0) for multiple documents.
+        
+        Used to materialize graph search results.
+        Returns a list of dicts similar to bm25_search but without scores.
+        """
+        if not paths:
+            return []
+            
+        placeholders = ",".join("?" * len(paths))
+        query = f"""
+            SELECT
+                c.id              AS chunk_id,
+                d.path            AS doc_path,
+                d.title           AS doc_title,
+                c.text            AS text,
+                c.header_path     AS header_path,
+                c.char_offset     AS char_offset
+            FROM documents d
+            JOIN chunks c ON c.doc_id = d.id
+            WHERE d.path IN ({placeholders}) AND c.chunk_index = 0
+        """
+        rows = self.conn.execute(query, paths).fetchall()
+        return [dict(r) for r in rows]
+
     # ── Search ────────────────────────────────────────────────────────────────
 
     def bm25_search(
