@@ -415,7 +415,15 @@ def query_vault(
 
 @mcp.tool(
     name="vault_save_reference",
-    description="Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /References/, aggiornando l'indice.",
+    description=(
+        "Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /References/, aggiornando l'indice. "
+        "CRITICAL AGENT INSTRUCTION (Memory Consolidation Protocol): "
+        "Dopo aver usato questo tool, DEVI sempre: "
+        "1. Leggere la reference appena salvata. "
+        "2. Sintetizzare i concetti chiave estraendoli in una o più note atomiche dentro /Concepts/ usando vault_write. "
+        "3. Collegare le note atomiche alla reference tramite [[wikilinks]]. "
+        "4. Documentare il tuo ragionamento in un log dentro /Episodic/."
+    )
 )
 def vault_save_reference(url: str, title_override: str | None = None) -> str:
     import json
