@@ -194,6 +194,11 @@ class FrontmatterIndex:
                         results.append({"path": rel_path, "frontmatter": fm})
         return results
 
+    def get_frontmatter(self, path: str) -> dict | None:
+        """Return the frontmatter dict for a given vault-relative path, or None."""
+        with self._lock:
+            return self._index.get(path)
+
     # ── LinkIndex queries ──────────────────────────────────────────────────────
 
     def get_backlinks(self, path: str) -> set[str]:

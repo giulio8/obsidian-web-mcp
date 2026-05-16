@@ -303,6 +303,7 @@ def query_vault(
     from .qmd.db import QMDDatabase
     from .qmd.search_engine import HybridSearchEngine
     from .qmd.vertex_client import embed_query, expand_query, rerank_chunks
+    from .retention_engine import compute_retention, DEFAULT_CONFIG as DECAY_CONFIG
 
     top_k = max(1, min(top_k, 20))  # clamp
 
@@ -331,6 +332,40 @@ def query_vault(
                 rerank_fn=rerank_fn,
             )
 
+            # ── Retention scoring (Lazy Ebbinghaus) ──────────────────────────
+            # Build a map of doc_path → retention_boost for the results we got.
+            # We only score the docs we retrieved (not the entire vault) — lazy.
+            retention_boosts: dict[str, float] = {}
+            retention_scores_map: dict[str, float] = {}
+            try:
+                unique_paths = list({r.doc_path for r in results})
+                # Fetch mtime from QMD documents table (already stored there)
+                mtime_map: dict[str, float] = {}
+                for row in db.conn.execute(
+                    f"SELECT path, mtime FROM documents WHERE path IN ({','.join('?' * len(unique_paths))})",
+                    unique_paths,
+                ):
+                    mtime_map[row["path"]] = row["mtime"]
+
+                for path in unique_paths:
+                    stats_entry = access_tracker.get_stats(path)
+                    fm = frontmatter_index.get_frontmatter(path)
+                    note_type = fm.get("type") if fm else None
+                    created_at_ts = mtime_map.get(path)
+                    rs = compute_retention(
+                        path=path,
+                        note_type=note_type,
+                        created_at_ts=created_at_ts,
+                        access_stats=stats_entry,
+                        config=DECAY_CONFIG,
+                    )
+                    retention_boosts[path] = rs.as_rrf_boost
+                    retention_scores_map[path] = round(rs.score, 4)
+            except Exception as e:
+                logger.debug(f"Retention scoring skipped: {e}")
+            # ─────────────────────────────────────────────────────────────────
+
+
             # Apply path filter post-retrieval (simple prefix match)
             if path_filter:
                 results = [r for r in results if r.doc_path.startswith(path_filter)]
@@ -338,7 +373,8 @@ def query_vault(
             output = [
                 {
                     "rank": i + 1,
-                    "score": round(r.score, 4),
+                    "score": round(r.score + retention_boosts.get(r.doc_path, 0.0), 4),
+                    "retention": retention_scores_map.get(r.doc_path, None),
                     "path": r.doc_path,
                     "title": r.doc_title,
                     "section": r.header_path,
