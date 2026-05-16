@@ -110,7 +110,7 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
     name="vault_write",
     description=(
         "Write a file to the Obsidian vault. Supports frontmatter merging with existing files. Creates parent directories by default. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _System/agent.md"
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
@@ -218,7 +218,7 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
         "Append content to the end of a vault file, or insert it after a specific ## section heading. "
         "Use for adding log entries, todo items, or new sections without rewriting the whole file. "
         "Creates the file if it does not exist. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _System/agent.md"
     ),
     annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
 )
@@ -238,7 +238,7 @@ def vault_append(
         "Create or update multiple vault files in a single call. "
         "Each item needs 'path' and 'content'; optionally 'merge_frontmatter': true. "
         "More efficient than calling vault_write repeatedly for bulk note creation. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _System/agent.md"
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
@@ -252,7 +252,7 @@ def vault_batch_write(files: list[dict]) -> str:
     description=(
         "Surgically extract text from one note, replace it with a [[wikilink]], and create a new atomic note. "
         "Use this for Zettelkasten refactoring when a note becomes too monolithic. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _Meta/agent.md"
+        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in _System/agent.md"
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
@@ -435,8 +435,8 @@ def query_vault(
 @mcp.tool(
     name="vault_save_reference",
     description=(
-        "Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /References/, aggiornando l'indice. "
-        "ATTENZIONE: Prima di operare, DEVI leggere le policy in _Meta/agent.md"
+        "Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /Library/Web/, aggiornando l'indice. "
+        "ATTENZIONE: Prima di operare, DEVI leggere le policy in _System/agent.md"
     )
 )
 def vault_save_reference(url: str, title_override: str | None = None) -> str:
@@ -484,7 +484,7 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
             slug = str(int(time.time()))
             
         file_name = f"{slug}.md"
-        references_dir = VAULT_PATH / "References"
+        references_dir = VAULT_PATH / "Library" / "Web"
         references_dir.mkdir(parents=True, exist_ok=True)
         
         file_path = references_dir / file_name
