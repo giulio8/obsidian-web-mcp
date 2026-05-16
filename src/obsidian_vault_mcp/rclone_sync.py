@@ -8,7 +8,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-from .config import VAULT_PATH
+from .config import VAULT_PATH, VAULT_RCLONE_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,19 @@ def push_file(vault_relative_path: str) -> None:
                               es. "agents/mia-nota.md"
     """
     local_path = VAULT_PATH / vault_relative_path
-    remote_path = f"{_get_remote()}/{vault_relative_path}"
+    
+    # Costruisci il path remoto, aggiungendo l'eventuale prefisso
+    remote_path = f"{_get_remote()}/"
+    if VAULT_RCLONE_PREFIX:
+        remote_path += f"{VAULT_RCLONE_PREFIX}/"
+    remote_path += vault_relative_path
+    
+    # Pulizia doppi slash accidentali (escluso remote:bucket/)
+    if "//" in remote_path.split(":", 1)[-1]:
+        remote_base, remote_rest = remote_path.split(":", 1)
+        import re
+        remote_rest = re.sub(r"/+", "/", remote_rest)
+        remote_path = f"{remote_base}:{remote_rest}"
 
     try:
         subprocess.Popen(
