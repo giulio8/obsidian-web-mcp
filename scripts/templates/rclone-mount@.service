@@ -1,0 +1,23 @@
+[Unit]
+Description=Rclone Mount for Obsidian R2 Vault - %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=giulio
+Group=giulio
+EnvironmentFile=/etc/default/rclone-mount-%i
+ExecStart=/usr/bin/rclone mount ${RCLONE_REMOTE}:${BUCKET_NAME} ${MOUNT_DIR} \
+  --vfs-cache-mode full \
+  --dir-cache-time 30m \
+  --vfs-cache-max-age 24h \
+  --vfs-cache-max-size 5G \
+  --allow-other \
+  --log-level INFO
+ExecStop=fusermount3 -uz ${MOUNT_DIR}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+# Cloudflare R2 Multi-Tenant rclone.conf configuration
+# Place this at /home/giulio/.config/rclone/rclone.conf
+
+[user_a_r2]
+type = s3
+provider = Cloudflare
+access_key_id = <USER_A_R2_ACCESS_KEY_ID>
+secret_access_key = <USER_A_R2_SECRET_ACCESS_KEY>
+endpoint = https://<USER_A_ACCOUNT_ID>.r2.cloudflarestorage.com
+acl = private
+
+[user_b_r2]
+type = s3
+provider = Cloudflare
+access_key_id = <USER_B_R2_ACCESS_KEY_ID>
+secret_access_key = <USER_B_R2_SECRET_ACCESS_KEY>
+endpoint = https://<USER_B_ACCOUNT_ID>.r2.cloudflarestorage.com
+acl = private

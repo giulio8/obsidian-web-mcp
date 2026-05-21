@@ -4,9 +4,41 @@ Exposes read/write access to an Obsidian vault over Streamable HTTP.
 Designed to run behind Cloudflare Tunnel for secure remote access.
 """
 
+import argparse
 import json
 import logging
+import os
 import sys
+
+# Parse command line arguments to override environment variables BEFORE importing config modules!
+parser = argparse.ArgumentParser(description="Obsidian Vault MCP Server", add_help=False)
+parser.add_argument("--port", type=int, help="Port to run the MCP server on")
+parser.add_argument("--root-path", type=str, help="Root path prefix for routing (e.g. /giulio)")
+parser.add_argument("--vault-path", type=str, help="Path to the Obsidian vault")
+parser.add_argument("--db-path", type=str, help="Path to the SQLite search index database")
+parser.add_argument("--access-db-path", type=str, help="Path to the SQLite access tracker database")
+parser.add_argument("--mcp-name", type=str, help="Name of the MCP server instance")
+parser.add_argument("-h", "--help", action="store_true", help="Show this help message and exit")
+
+args, _ = parser.parse_known_args()
+
+if args.help:
+    parser.print_help()
+    sys.exit(0)
+
+if args.port:
+    os.environ["VAULT_MCP_PORT"] = str(args.port)
+if args.root_path:
+    os.environ["VAULT_MCP_ROOT_PATH"] = args.root_path
+if args.vault_path:
+    os.environ["VAULT_PATH"] = args.vault_path
+if args.db_path:
+    os.environ["VAULT_DB_PATH"] = args.db_path
+if args.access_db_path:
+    os.environ["ACCESS_DB_PATH"] = args.access_db_path
+if args.mcp_name:
+    os.environ["VAULT_MCP_NAME"] = args.mcp_name
+
 from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
@@ -44,7 +76,7 @@ if VAULT_MCP_HOSTNAME:
 
 # Create the MCP server
 mcp = FastMCP(
-    "obsidian_web_mcp",
+    os.environ.get("VAULT_MCP_NAME", "obsidian_web_mcp"),
     stateless_http=True,
     json_response=True,
     transport_security=TransportSecuritySettings(
@@ -566,6 +598,12 @@ def main():
             app.routes.insert(0, route)
 
         app.add_middleware(BearerAuthMiddleware)
+        
+        # Configure root_path routing prefix if specified
+        root_path = os.environ.get("VAULT_MCP_ROOT_PATH", "")
+        if root_path:
+            logger.info(f"Root path configured for Uvicorn: {root_path}")
+
         logger.info(f"Starting server on port {VAULT_MCP_PORT} with bearer auth + OAuth")
         
         logger.info(f"Avvio indicizzazione globale del Vault: {VAULT_PATH}")
@@ -576,14 +614,18 @@ def main():
         logger.info(f"Access tracker avviato: {access_tracker.stats()}")
 
         import uvicorn
-        uvicorn.run(
-            app,
-            host=VAULT_MCP_HOST,
-            port=VAULT_MCP_PORT,
-            log_level="info",
-            proxy_headers=True,
-            forwarded_allow_ips="*",
-        )
+        uvicorn_args = {
+            "app": app,
+            "host": VAULT_MCP_HOST,
+            "port": VAULT_MCP_PORT,
+            "log_level": "info",
+            "proxy_headers": True,
+            "forwarded_allow_ips": "*",
+        }
+        if root_path:
+            uvicorn_args["root_path"] = root_path
+
+        uvicorn.run(**uvicorn_args)
     except Exception as e:
         logger.warning(f"Could not build app ({e}), falling back to mcp.run()")
         logger.warning("Auth will NOT be enforced in this mode")

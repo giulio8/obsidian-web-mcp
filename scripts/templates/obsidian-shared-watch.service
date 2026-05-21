@@ -1,0 +1,17 @@
+[Unit]
+Description=Obsidian Vault Shared Zone Watchdog Synchronizer
+After=network.target rclone-mount@giulio.service rclone-mount@elsa.service
+
+[Service]
+Type=simple
+User=giulio
+Group=giulio
+WorkingDirectory=/home/giulio/obsidian-web-mcp
+ExecStart=/usr/local/bin/uv run python scripts/shared_watch.py \
+  --dir-a /home/giulio/vaults/giulio/Knowledge/Shared_Zone \
+  --dir-b /home/giulio/vaults/elsa/Knowledge/Shared_Zone
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

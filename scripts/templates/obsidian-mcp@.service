@@ -1,0 +1,17 @@
+[Unit]
+Description=Obsidian MCP Server for %i
+After=network.target rclone-mount@%i.service
+Requires=rclone-mount@%i.service
+
+[Service]
+Type=simple
+User=giulio
+Group=giulio
+WorkingDirectory=/home/giulio/obsidian-web-mcp
+EnvironmentFile=/etc/default/obsidian-mcp-%i
+ExecStart=/usr/local/bin/uv run vault-mcp
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

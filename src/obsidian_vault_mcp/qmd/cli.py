@@ -57,11 +57,12 @@ def main():
     )
     args = parser.parse_args()
 
-    # Resolve vault path
-    vault_path = args.vault or Path(os.environ.get("VAULT_PATH", ""))
+    # Resolve vault path safely without defaulting to "." when VAULT_PATH is empty/not set
+    env_vault_path = os.environ.get("VAULT_PATH")
+    vault_path = args.vault or (Path(env_vault_path) if env_vault_path else None)
     if not vault_path or not vault_path.is_dir():
         logger.error(
-            f"Vault path does not exist or is not set: {vault_path!r}\n"
+            f"Vault path does not exist or is not set: {env_vault_path!r}\n"
             "Set VAULT_PATH in .env or use --vault /path/to/vault"
         )
         sys.exit(1)

@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _default_access_db_path() -> Path:
+    env_path = os.environ.get("ACCESS_DB_PATH")
+    if env_path:
+        p = Path(env_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
     cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     db_dir = cache / "second-brain-engine"
     db_dir.mkdir(parents=True, exist_ok=True)

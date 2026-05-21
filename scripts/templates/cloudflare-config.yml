@@ -1,0 +1,20 @@
+# Cloudflare Tunnel Configuration
+# Path-based routing configuration for multi-tenant setup on a single VM.
+# Save this on the VM, e.g. at /home/giulio/.cloudflared/config.yml
+
+tunnel: <YOUR_TUNNEL_ID_OR_NAME>
+credentials-file: /home/giulio/.cloudflared/<YOUR_TUNNEL_ID>.json
+
+ingress:
+  # Route traffic for Giulio's vault
+  - hostname: brain.tuodominio.it
+    path: ^/giulio(/.*)?$
+    service: http://localhost:8420
+
+  # Route traffic for Elsa's vault
+  - hostname: brain.tuodominio.it
+    path: ^/elsa(/.*)?$
+    service: http://localhost:8421
+
+  # Default fall-through: 404 for anything else
+  - service: http_status:404

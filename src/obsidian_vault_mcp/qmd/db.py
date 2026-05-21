@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _default_db_path() -> Path:
+    env_path = os.environ.get("VAULT_DB_PATH")
+    if env_path:
+        p = Path(env_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
     cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
     db_dir = cache / "qmd-lite"
     db_dir.mkdir(parents=True, exist_ok=True)

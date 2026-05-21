@@ -11,6 +11,12 @@ VAULT_MCP_HOSTNAME = os.environ.get("VAULT_MCP_HOSTNAME", "")
 # Bind address for uvicorn. Set to 127.0.0.1 after Caddy is in front.
 VAULT_MCP_HOST = os.environ.get("VAULT_MCP_HOST", "0.0.0.0")
 
+# Multi-tenant & routing overrides
+VAULT_MCP_ROOT_PATH = os.environ.get("VAULT_MCP_ROOT_PATH", "")
+VAULT_MCP_NAME = os.environ.get("VAULT_MCP_NAME", "obsidian_web_mcp")
+VAULT_DB_PATH = os.environ.get("VAULT_DB_PATH", "")
+ACCESS_DB_PATH = os.environ.get("ACCESS_DB_PATH", "")
+
 # Prefix to prepend to remote paths when syncing with rclone
 VAULT_RCLONE_PREFIX = os.environ.get("VAULT_RCLONE_PREFIX", "")
 
