@@ -14,6 +14,10 @@ obsidian-mcp.duckdns.org {
     rewrite /.well-known/oauth-protected-resource/giulio/mcp /giulio/mcp/.well-known/oauth-protected-resource
     rewrite /.well-known/oauth-protected-resource/elsa/mcp /elsa/mcp/.well-known/oauth-protected-resource
 
+    # Risoluzione della localizzazione dell'authorization server per RFC 8414 con path-based issuer
+    rewrite /.well-known/oauth-authorization-server/giulio /giulio/.well-known/oauth-authorization-server
+    rewrite /.well-known/oauth-authorization-server/elsa /elsa/.well-known/oauth-authorization-server
+
     # Forwarding al server MCP locale di Giulio
     handle /giulio* {
         uri strip_prefix /giulio
@@ -42,7 +46,7 @@ obsidian-mcp.duckdns.org {
             roll_keep 5
         }
         format console
-        level WARN
+        level INFO
     }
 
     # Header di sicurezza
