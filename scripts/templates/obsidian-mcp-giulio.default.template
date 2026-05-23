@@ -14,5 +14,8 @@ ACCESS_DB_PATH="/home/giulio/.cache/giulio/access.sqlite"
 R2_BUCKET_NAME="notes"
 VAULT_RCLONE_PREFIX="second-brain"
 
+# Credenziali OAuth 2.0 per integrazioni esterne (es. Perplexity)
+VAULT_OAUTH_CLIENT_SECRET="77e37a919bc46fdd04862a356073a6a825c7d4cb01a91185cd4473183b184a8a"
+
 # Includere qui i parametri di configurazione del server (es. GEMINI_API_KEY se caricata da qui)
 # GEMINI_API_KEY="..."

@@ -14,5 +14,8 @@ ACCESS_DB_PATH="/home/giulio/.cache/elsa/access.sqlite"
 R2_BUCKET_NAME="elsa-notes"
 VAULT_RCLONE_PREFIX="second-brain"
 
+# Credenziali OAuth 2.0 per integrazioni esterne (es. Perplexity)
+VAULT_OAUTH_CLIENT_SECRET="96bacb36f0eacf8ae4086eaed6d0f30355e19bda3bb8e14be2d264f2ba1881b7"
+
 # Includere qui i parametri di configurazione del server (es. GEMINI_API_KEY se caricata da qui)
 # GEMINI_API_KEY="..."
