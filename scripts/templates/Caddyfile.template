@@ -18,6 +18,10 @@ obsidian-mcp.duckdns.org {
     rewrite /.well-known/oauth-authorization-server/giulio /giulio/.well-known/oauth-authorization-server
     rewrite /.well-known/oauth-authorization-server/elsa /elsa/.well-known/oauth-authorization-server
 
+    # Fallback per client (come Perplexity) che risolvono gli endpoint well-known sulla root del dominio
+    rewrite /.well-known/oauth-authorization-server /giulio/.well-known/oauth-authorization-server
+    rewrite /.well-known/oauth-protected-resource /giulio/mcp/.well-known/oauth-protected-resource
+
     # Forwarding al server MCP locale di Giulio
     handle /giulio* {
         uri strip_prefix /giulio
