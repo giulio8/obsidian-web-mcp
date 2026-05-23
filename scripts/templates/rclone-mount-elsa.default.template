@@ -1,0 +1,6 @@
+# /etc/default/rclone-mount-elsa
+# Configurazione Mount Rclone per Elsa
+
+RCLONE_REMOTE="obsidian-r2"
+BUCKET_NAME="elsa-notes"
+MOUNT_DIR="/home/giulio/vaults/elsa"

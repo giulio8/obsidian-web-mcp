@@ -8,8 +8,8 @@ User=giulio
 Group=giulio
 WorkingDirectory=/home/giulio/obsidian-web-mcp
 ExecStart=/usr/local/bin/uv run python scripts/shared_watch.py \
-  --dir-a /home/giulio/vaults/giulio/Knowledge/Shared_Zone \
-  --dir-b /home/giulio/vaults/elsa/Knowledge/Shared_Zone
+  --dir-a /home/giulio/vaults/giulio/second-brain/Knowledge/Shared_Zone \
+  --dir-b /home/giulio/vaults/elsa/second-brain/Knowledge/Shared_Zone
 Restart=on-failure
 RestartSec=10
 

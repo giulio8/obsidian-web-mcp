@@ -1,0 +1,18 @@
+# /etc/default/obsidian-mcp-giulio
+# Ambiente per il server MCP di Giulio
+
+VAULT_MCP_NAME="obsidian-vault-giulio"
+VAULT_MCP_PORT=8420
+VAULT_MCP_ROOT_PATH="/giulio"
+VAULT_PATH="/home/giulio/vaults/giulio/second-brain"
+
+# Database SQLite fuori dal mount FUSE
+VAULT_DB_PATH="/home/giulio/.cache/giulio/index.sqlite"
+ACCESS_DB_PATH="/home/giulio/.cache/giulio/access.sqlite"
+
+# Sincronizzazione R2
+R2_BUCKET_NAME="notes"
+VAULT_RCLONE_PREFIX="second-brain"
+
+# Includere qui i parametri di configurazione del server (es. GEMINI_API_KEY se caricata da qui)
+# GEMINI_API_KEY="..."

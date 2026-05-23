@@ -1,0 +1,6 @@
+# /etc/default/rclone-mount-giulio
+# Configurazione Mount Rclone per Giulio
+
+RCLONE_REMOTE="obsidian-r2"
+BUCKET_NAME="notes"
+MOUNT_DIR="/home/giulio/vaults/giulio"

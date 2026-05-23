@@ -1,0 +1,18 @@
+# /etc/default/obsidian-mcp-elsa
+# Ambiente per il server MCP di Elsa
+
+VAULT_MCP_NAME="obsidian-vault-elsa"
+VAULT_MCP_PORT=8421
+VAULT_MCP_ROOT_PATH="/elsa"
+VAULT_PATH="/home/giulio/vaults/elsa/second-brain"
+
+# Database SQLite fuori dal mount FUSE
+VAULT_DB_PATH="/home/giulio/.cache/elsa/index.sqlite"
+ACCESS_DB_PATH="/home/giulio/.cache/elsa/access.sqlite"
+
+# Sincronizzazione R2
+R2_BUCKET_NAME="elsa-notes"
+VAULT_RCLONE_PREFIX="second-brain"
+
+# Includere qui i parametri di configurazione del server (es. GEMINI_API_KEY se caricata da qui)
+# GEMINI_API_KEY="..."
