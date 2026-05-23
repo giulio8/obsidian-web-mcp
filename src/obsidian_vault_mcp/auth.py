@@ -20,7 +20,14 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Validates Bearer tokens on all requests except OAuth and health endpoints."""
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in _AUTH_EXEMPT_PATHS:
+        path = request.url.path
+        is_exempt = (
+            path in _AUTH_EXEMPT_PATHS
+            or "/.well-known/" in path
+            or "/oauth/" in path
+            or path.endswith("/health")
+        )
+        if is_exempt:
             return await call_next(request)
 
         if not VAULT_MCP_TOKEN:

@@ -212,6 +212,10 @@ async def oauth_register(request: Request) -> JSONResponse:
 # Starlette routes to mount on the app
 oauth_routes = [
     Route("/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
+    Route("/mcp/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
+    Route("/.well-known/oauth-protected-resource", oauth_metadata, methods=["GET"]),
+    Route("/mcp/.well-known/oauth-protected-resource", oauth_metadata, methods=["GET"]),
+    Route("/.well-known/oauth-protected-resource/mcp", oauth_metadata, methods=["GET"]),
     Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
     Route("/oauth/token", oauth_token, methods=["POST"]),
     Route("/oauth/register", oauth_register, methods=["POST"]),
