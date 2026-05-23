@@ -1,0 +1,54 @@
+{
+    servers {
+        timeouts {
+            idle 0s
+        }
+    }
+}
+
+# Obsidian MCP — HTTPS reverse proxy
+# Caddy gestisce automaticamente il certificato Let's Encrypt
+
+obsidian-mcp.duckdns.org {
+    # Risoluzione del bug di scoperta OAuth path-based (RFC 9728) per client come Perplexity
+    rewrite /.well-known/oauth-protected-resource/giulio/mcp /giulio/mcp/.well-known/oauth-protected-resource
+    rewrite /.well-known/oauth-protected-resource/elsa/mcp /elsa/mcp/.well-known/oauth-protected-resource
+
+    # Forwarding al server MCP locale di Giulio
+    handle /giulio* {
+        uri strip_prefix /giulio
+        reverse_proxy 127.0.0.1:8420 {
+            flush_interval -1
+        }
+    }
+
+    # Forwarding al server MCP locale di Elsa
+    handle /elsa* {
+        uri strip_prefix /elsa
+        reverse_proxy 127.0.0.1:8421 {
+            flush_interval -1
+        }
+    }
+
+    # Default fall-through
+    handle {
+        respond "Not Found" 404
+    }
+
+    # Log compatti
+    log {
+        output file /var/log/caddy/obsidian-mcp.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format console
+        level WARN
+    }
+
+    # Header di sicurezza
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+    }
+}
