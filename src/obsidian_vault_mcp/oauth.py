@@ -55,6 +55,14 @@ async def oauth_metadata(request: Request) -> JSONResponse:
     })
 
 
+async def oauth_protected_resource(request: Request) -> JSONResponse:
+    """RFC 9728 OAuth protected resource metadata."""
+    base_url = str(request.base_url).rstrip("/")
+    return JSONResponse({
+        "authorization_servers": [base_url]
+    })
+
+
 async def oauth_authorize(request: Request):
     """OAuth 2.0 authorization endpoint.
 
@@ -210,9 +218,9 @@ async def oauth_register(request: Request) -> JSONResponse:
 oauth_routes = [
     Route("/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
     Route("/mcp/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
-    Route("/.well-known/oauth-protected-resource", oauth_metadata, methods=["GET"]),
-    Route("/mcp/.well-known/oauth-protected-resource", oauth_metadata, methods=["GET"]),
-    Route("/.well-known/oauth-protected-resource/mcp", oauth_metadata, methods=["GET"]),
+    Route("/.well-known/oauth-protected-resource", oauth_protected_resource, methods=["GET"]),
+    Route("/mcp/.well-known/oauth-protected-resource", oauth_protected_resource, methods=["GET"]),
+    Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource, methods=["GET"]),
     Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
     Route("/oauth/token", oauth_token, methods=["POST"]),
     Route("/oauth/register", oauth_register, methods=["POST"]),
