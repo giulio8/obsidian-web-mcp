@@ -43,6 +43,9 @@ def _cleanup_codes():
 async def oauth_metadata(request: Request) -> JSONResponse:
     """RFC 8414 OAuth authorization server metadata."""
     base_url = str(request.base_url).rstrip("/")
+    root_path = request.scope.get("root_path", "")
+    if root_path:
+        base_url = f"{base_url}{root_path}"
     return JSONResponse({
         "issuer": base_url,
         "authorization_endpoint": f"{base_url}/oauth/authorize",
