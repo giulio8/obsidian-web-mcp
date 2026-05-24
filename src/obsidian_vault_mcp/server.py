@@ -142,12 +142,14 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
     name="vault_write",
     description=(
         "Write a file to the Obsidian vault. Supports frontmatter merging with existing files. Creates parent directories by default. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in System/agent.md"
+        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md. "
+        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
     """Write a file to the vault."""
+    path = path.replace("—", "-").replace("–", "-")
     inp = VaultWriteInput(path=path, content=content, create_dirs=create_dirs, merge_frontmatter=merge_frontmatter)
     return _vault_write(inp.path, inp.content, inp.create_dirs, inp.merge_frontmatter)
 
@@ -220,12 +222,15 @@ def vault_list(
         "Move a file or directory within the vault. "
         "With update_links=True (default), automatically rewrites all [[wikilinks]] "
         "and markdown links pointing to the moved file using the in-memory link graph — "
-        "no vault scan needed. Mirrors Obsidian Desktop's auto-link-update behaviour."
+        "no vault scan needed. Mirrors Obsidian Desktop's auto-link-update behaviour. "
+        "CRITICAL: Destination filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_move(source: str, destination: str, create_dirs: bool = True, update_links: bool = True) -> str:
     """Move a file or directory, optionally rewriting backlinks."""
+    source = source.replace("—", "-").replace("–", "-")
+    destination = destination.replace("—", "-").replace("–", "-")
     inp = VaultMoveInput(source=source, destination=destination, create_dirs=create_dirs)
     return _vault_move(inp.source, inp.destination, inp.create_dirs, update_links)
 
@@ -250,7 +255,8 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
         "Append content to the end of a vault file, or insert it after a specific ## section heading. "
         "Use for adding log entries, todo items, or new sections without rewriting the whole file. "
         "Creates the file if it does not exist. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in System/agent.md"
+        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md. "
+        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
 )
@@ -261,6 +267,7 @@ def vault_append(
     create_if_missing: bool = True,
 ) -> str:
     """Append content to a vault file."""
+    path = path.replace("—", "-").replace("–", "-")
     return _vault_append(path, content, after_section, create_if_missing)
 
 
@@ -270,12 +277,16 @@ def vault_append(
         "Create or update multiple vault files in a single call. "
         "Each item needs 'path' and 'content'; optionally 'merge_frontmatter': true. "
         "More efficient than calling vault_write repeatedly for bulk note creation. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in System/agent.md"
+        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md. "
+        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_batch_write(files: list[dict]) -> str:
     """Create or update multiple files at once."""
+    for f in files:
+        if "path" in f:
+            f["path"] = f["path"].replace("—", "-").replace("–", "-")
     return _vault_batch_write(files)
 
 
@@ -284,12 +295,15 @@ def vault_batch_write(files: list[dict]) -> str:
     description=(
         "Surgically extract text from one note, replace it with a [[wikilink]], and create a new atomic note. "
         "Use this for Zettelkasten refactoring when a note becomes too monolithic. "
-        "ATTENZIONE: Prima di scrivere o modificare file, DEVI leggere le policy in System/agent.md"
+        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md. "
+        "CRITICAL: The new note filename and path must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_extract_to_new_note(source_path: str, selection_to_extract: str, new_note_path: str, new_note_content: str | None = None) -> str:
     """Extract text to a new atomic note and link it."""
+    source_path = source_path.replace("—", "-").replace("–", "-")
+    new_note_path = new_note_path.replace("—", "-").replace("–", "-")
     return _vault_extract_to_new_note(source_path, selection_to_extract, new_note_path, new_note_content)
 
 
@@ -475,7 +489,8 @@ def query_vault(
     name="vault_save_reference",
     description=(
         "Downloads a web page, extracts its clean main content (defuddle), and saves it as a Markdown file in /Library/Web/, updating the index. "
-        "ATTENTION: Before operating, you MUST read the policies in System/agent.md"
+        "ATTENTION: Before operating, you MUST read the policies in System/agent.md. "
+        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
     )
 )
 def vault_save_reference(url: str, title_override: str | None = None) -> str:
@@ -517,8 +532,9 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
         if metadata and metadata.date:
             post.metadata["published_date"] = metadata.date
 
+        title_clean = title.replace("—", "-").replace("–", "-")
         # Slugify title for filename
-        slug = slugify(title, max_length=60)
+        slug = slugify(title_clean, max_length=60)
         if not slug:
             slug = str(int(time.time()))
             
@@ -561,7 +577,8 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
 
 @mcp.tool(
     name="vault_sync_context",
-    description="Synchronizes the local knowledge base state with external sources to guarantee data consistency."
+    description="Synchronizes the local knowledge base state with external sources to guarantee data consistency. Use this when User directly or indirectly "\
+        "mentions he has **recently** made local changes to the knowledge base."
 )
 def vault_sync_context() -> str:
     """Force updating the vault cache by synchronizing with the cloud."""
