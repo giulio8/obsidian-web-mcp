@@ -251,8 +251,15 @@ class FrontmatterIndex:
     # ── Internal helpers ───────────────────────────────────────────────────────
 
     def _is_excluded(self, path: Path) -> bool:
-        """Check whether any path component is in config.EXCLUDED_DIRS."""
-        return bool(config.EXCLUDED_DIRS & set(path.relative_to(config.VAULT_PATH).parts))
+        """Check whether any path component is in config.EXCLUDED_DIRS, or outside the prefix zone."""
+        rel = path.relative_to(config.VAULT_PATH)
+        if config.EXCLUDED_DIRS & set(rel.parts):
+            return True
+        if config.VAULT_RCLONE_PREFIX:
+            parts = rel.parts
+            if not parts or parts[0] != config.VAULT_RCLONE_PREFIX:
+                return True
+        return False
 
     def _parse_frontmatter(self, path: Path) -> dict | None:
         """Parse YAML frontmatter from a markdown file. Returns None on failure."""
