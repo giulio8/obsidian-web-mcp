@@ -222,15 +222,12 @@ def vault_list(
         "Move a file or directory within the vault. "
         "With update_links=True (default), automatically rewrites all [[wikilinks]] "
         "and markdown links pointing to the moved file using the in-memory link graph — "
-        "no vault scan needed. Mirrors Obsidian Desktop's auto-link-update behaviour. "
-        "CRITICAL: Destination filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
+        "no vault scan needed. Mirrors Obsidian Desktop's auto-link-update behaviour."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_move(source: str, destination: str, create_dirs: bool = True, update_links: bool = True) -> str:
     """Move a file or directory, optionally rewriting backlinks."""
-    source = source.replace("—", "-").replace("–", "-")
-    destination = destination.replace("—", "-").replace("–", "-")
     inp = VaultMoveInput(source=source, destination=destination, create_dirs=create_dirs)
     return _vault_move(inp.source, inp.destination, inp.create_dirs, update_links)
 
@@ -255,8 +252,7 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
         "Append content to the end of a vault file, or insert it after a specific ## section heading. "
         "Use for adding log entries, todo items, or new sections without rewriting the whole file. "
         "Creates the file if it does not exist. "
-        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md. "
-        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
+        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
 )
@@ -267,7 +263,6 @@ def vault_append(
     create_if_missing: bool = True,
 ) -> str:
     """Append content to a vault file."""
-    path = path.replace("—", "-").replace("–", "-")
     return _vault_append(path, content, after_section, create_if_missing)
 
 
@@ -277,16 +272,12 @@ def vault_append(
         "Create or update multiple vault files in a single call. "
         "Each item needs 'path' and 'content'; optionally 'merge_frontmatter': true. "
         "More efficient than calling vault_write repeatedly for bulk note creation. "
-        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md. "
-        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
+        "ATTENTION: Before writing or modifying files, you MUST read the policies in System/agent.md."
     ),
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_batch_write(files: list[dict]) -> str:
     """Create or update multiple files at once."""
-    for f in files:
-        if "path" in f:
-            f["path"] = f["path"].replace("—", "-").replace("–", "-")
     return _vault_batch_write(files)
 
 
@@ -489,8 +480,7 @@ def query_vault(
     name="vault_save_reference",
     description=(
         "Downloads a web page, extracts its clean main content (defuddle), and saves it as a Markdown file in /Library/Web/, updating the index. "
-        "ATTENTION: Before operating, you MUST read the policies in System/agent.md. "
-        "CRITICAL: Filenames and paths must NOT contain em-dashes (—). Replace them with regular hyphens (-) or spaces."
+        "ATTENTION: Before operating, you MUST read the policies in System/agent.md."
     )
 )
 def vault_save_reference(url: str, title_override: str | None = None) -> str:
