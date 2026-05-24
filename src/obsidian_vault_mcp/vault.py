@@ -12,12 +12,12 @@ import frontmatter as fm_lib
 from . import config
 
 
-def resolve_vault_path(relative_path: str, write_operation: bool = False) -> Path:
+def resolve_vault_path(relative_path: str) -> Path:
     """Resolve a relative path against the vault root, with safety checks.
 
     Raises ValueError if the path escapes the vault, contains null bytes,
-    touches dotfile/dot-directory components, or attempts to write outside
-    the allowed prefix zone.
+    touches dotfile/dot-directory components, or is outside the configured
+    prefix sandbox zone.
     """
     if "\x00" in relative_path:
         raise ValueError("Path contains null bytes")
@@ -36,13 +36,12 @@ def resolve_vault_path(relative_path: str, write_operation: bool = False) -> Pat
     if not str(resolved).startswith(str(vault_root) + os.sep) and resolved != vault_root:
         raise ValueError("Path resolves outside the vault root")
 
-    # Enforce write safety: if write_operation is True and a prefix is configured,
-    # the target path must be strictly inside the prefix directory.
-    if write_operation and config.VAULT_RCLONE_PREFIX:
+    # Strict Sandbox: if a prefix is configured, every path MUST be strictly inside that prefix directory.
+    if config.VAULT_RCLONE_PREFIX:
         prefix_dir = (config.VAULT_PATH / config.VAULT_RCLONE_PREFIX).resolve()
         if not str(resolved).startswith(str(prefix_dir) + os.sep) and resolved != prefix_dir:
             raise ValueError(
-                f"Write operation denied: Path '{relative_path}' is outside the allowed prefix zone '{config.VAULT_RCLONE_PREFIX}'"
+                f"Access denied: Path '{relative_path}' is outside the allowed prefix zone '{config.VAULT_RCLONE_PREFIX}'"
             )
 
     return resolved
@@ -115,7 +114,7 @@ def write_file_atomic(
             f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes"
         )
 
-    path = resolve_vault_path(relative_path, write_operation=True)
+    path = resolve_vault_path(relative_path)
     is_new = not path.exists()
 
     # Auto-inject lifecycle metadata before writing
@@ -150,8 +149,8 @@ def move_path(
     Both paths are relative to the vault root. Raises if the destination
     already exists.
     """
-    src = resolve_vault_path(source, write_operation=True)
-    dst = resolve_vault_path(destination, write_operation=True)
+    src = resolve_vault_path(source)
+    dst = resolve_vault_path(destination)
 
     if not src.exists():
         raise FileNotFoundError(f"Source does not exist: {source}")
@@ -171,7 +170,7 @@ def delete_path(relative_path: str) -> bool:
 
     Refuses to delete non-empty directories.
     """
-    path = resolve_vault_path(relative_path, write_operation=True)
+    path = resolve_vault_path(relative_path)
 
     if not path.exists():
         raise FileNotFoundError(f"Path does not exist: {relative_path}")

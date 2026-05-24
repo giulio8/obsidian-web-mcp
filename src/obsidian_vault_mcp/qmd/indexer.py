@@ -179,7 +179,9 @@ class VaultIndexer:
         return stats
 
     def _iter_markdown_files(self):
-        """Yield all .md files in the vault, skipping excluded directories."""
+        """Yield all .md files in the vault, skipping excluded directories and filtering by prefix."""
+        from obsidian_vault_mcp import config
+
         for path in self.vault_path.rglob("*"):
             if not path.is_file():
                 continue
@@ -187,4 +189,14 @@ class VaultIndexer:
                 continue
             if any(part in EXCLUDED_DIRS for part in path.parts):
                 continue
+
+            # Filter by prefix if configured
+            if config.VAULT_RCLONE_PREFIX:
+                try:
+                    rel_path = path.relative_to(self.vault_path)
+                    if not str(rel_path).startswith(config.VAULT_RCLONE_PREFIX + os.sep):
+                        continue
+                except ValueError:
+                    continue
+
             yield path

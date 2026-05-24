@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
     """Write a file to the vault, optionally merging frontmatter with existing content."""
     try:
-        resolve_vault_path(path, write_operation=True)
+        resolve_vault_path(path)
 
         if merge_frontmatter:
             try:
