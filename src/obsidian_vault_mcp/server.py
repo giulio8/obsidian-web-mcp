@@ -165,7 +165,7 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
 
 @mcp.tool(
     name="vault_search",
-    description="Search for text across vault files. Uses ripgrep if available, falls back to Python. Returns matching lines with context and frontmatter excerpts.",
+    description="Search for text across vault files. Uses ripgrep if available, falls back to Python. Returns matching lines with context and frontmatter excerpts. CRITICAL: Technical notes are in English, personal notes in Italian. Agents MUST query in English for technical/architectural topics.",
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_search(
@@ -328,7 +328,9 @@ def vault_delete(path: str, confirm: bool = False) -> str:
         "for any conceptual or open-ended question. "
         "Set rerank=True when the query is complex, ambiguous, or multi-concept (adds ~2s latency). "
         "Set rerank=False (default) for simple keyword lookups.\n"
-        "Set expand=True to enrich the query using a Vault-Aware Knowledge Map (SLM)."
+        "Set expand=True to enrich the query using a Vault-Aware Knowledge Map (SLM).\n"
+        "CRITICAL: Technical notes are in English, personal notes in Italian. "
+        "Agents MUST query in English for technical/architectural topics."
     ),
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
