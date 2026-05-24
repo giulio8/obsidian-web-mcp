@@ -88,6 +88,19 @@ mcp = FastMCP(
 
 # --- Register all tools ---
 
+def _normalize_path(path: str) -> str:
+    """Normalize path by removing em-dashes and prepending the sandbox prefix if missing."""
+    if not path:
+        return ""
+    path = path.replace("—", "-").replace("–", "-").lstrip("/")
+    from .config import VAULT_RCLONE_PREFIX
+    if VAULT_RCLONE_PREFIX:
+        from pathlib import Path
+        p = Path(path)
+        if not p.parts or p.parts[0] != VAULT_RCLONE_PREFIX:
+            path = str(Path(VAULT_RCLONE_PREFIX) / path)
+    return path
+
 from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
 from .tools.write import vault_write as _vault_write, vault_batch_frontmatter_update as _vault_batch_frontmatter_update
 from .tools.write_advanced import vault_patch as _vault_patch, vault_append as _vault_append, vault_batch_write as _vault_batch_write, vault_extract_to_new_note as _vault_extract_to_new_note
@@ -113,6 +126,7 @@ from .models import (
 )
 def vault_read(path: str) -> str:
     """Read a file from the vault."""
+    path = _normalize_path(path)
     inp = VaultReadInput(path=path)
     result = _vault_read(inp.path)
     try:
@@ -129,6 +143,7 @@ def vault_read(path: str) -> str:
 )
 def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
     """Read multiple files at once."""
+    paths = [_normalize_path(p) for p in paths]
     inp = VaultBatchReadInput(paths=paths, include_content=include_content)
     result = _vault_batch_read(inp.paths, inp.include_content)
     try:
@@ -149,7 +164,7 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
 )
 def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
     """Write a file to the vault."""
-    path = path.replace("—", "-").replace("–", "-")
+    path = _normalize_path(path)
     inp = VaultWriteInput(path=path, content=content, create_dirs=create_dirs, merge_frontmatter=merge_frontmatter)
     return _vault_write(inp.path, inp.content, inp.create_dirs, inp.merge_frontmatter)
 
@@ -161,6 +176,9 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
 )
 def vault_batch_frontmatter_update(updates: list[dict]) -> str:
     """Batch update frontmatter fields."""
+    for u in updates:
+        if "path" in u:
+            u["path"] = _normalize_path(u["path"])
     inp = VaultBatchFrontmatterUpdateInput(updates=updates)
     return _vault_batch_frontmatter_update(inp.updates)
 
@@ -178,6 +196,8 @@ def vault_search(
     context_lines: int = 2,
 ) -> str:
     """Search vault file contents."""
+    if path_prefix:
+        path_prefix = _normalize_path(path_prefix)
     inp = VaultSearchInput(query=query, path_prefix=path_prefix, file_pattern=file_pattern, max_results=max_results, context_lines=context_lines)
     return _vault_search(inp.query, inp.path_prefix, inp.file_pattern, inp.max_results, inp.context_lines)
 
@@ -195,6 +215,8 @@ def vault_search_frontmatter(
     max_results: int = 20,
 ) -> str:
     """Search by frontmatter fields."""
+    if path_prefix:
+        path_prefix = _normalize_path(path_prefix)
     inp = VaultSearchFrontmatterInput(field=field, value=value, match_type=match_type, path_prefix=path_prefix, max_results=max_results)
     return _vault_search_frontmatter(inp.field, inp.value, inp.match_type, inp.path_prefix, inp.max_results)
 
@@ -212,6 +234,7 @@ def vault_list(
     pattern: str | None = None,
 ) -> str:
     """List vault directory contents."""
+    path = _normalize_path(path)
     inp = VaultListInput(path=path, depth=depth, include_files=include_files, include_dirs=include_dirs, pattern=pattern)
     return _vault_list(inp.path, inp.depth, inp.include_files, inp.include_dirs, inp.pattern)
 
@@ -228,6 +251,8 @@ def vault_list(
 )
 def vault_move(source: str, destination: str, create_dirs: bool = True, update_links: bool = True) -> str:
     """Move a file or directory, optionally rewriting backlinks."""
+    source = _normalize_path(source)
+    destination = _normalize_path(destination)
     inp = VaultMoveInput(source=source, destination=destination, create_dirs=create_dirs)
     return _vault_move(inp.source, inp.destination, inp.create_dirs, update_links)
 
@@ -243,6 +268,7 @@ def vault_move(source: str, destination: str, create_dirs: bool = True, update_l
 )
 def vault_patch(path: str, old_str: str, new_str: str) -> str:
     """Surgical str_replace on a vault file."""
+    path = _normalize_path(path)
     return _vault_patch(path, old_str, new_str)
 
 
@@ -263,6 +289,7 @@ def vault_append(
     create_if_missing: bool = True,
 ) -> str:
     """Append content to a vault file."""
+    path = _normalize_path(path)
     return _vault_append(path, content, after_section, create_if_missing)
 
 
@@ -278,6 +305,9 @@ def vault_append(
 )
 def vault_batch_write(files: list[dict]) -> str:
     """Create or update multiple files at once."""
+    for f in files:
+        if "path" in f:
+            f["path"] = _normalize_path(f["path"])
     return _vault_batch_write(files)
 
 
@@ -293,8 +323,8 @@ def vault_batch_write(files: list[dict]) -> str:
 )
 def vault_extract_to_new_note(source_path: str, selection_to_extract: str, new_note_path: str, new_note_content: str | None = None) -> str:
     """Extract text to a new atomic note and link it."""
-    source_path = source_path.replace("—", "-").replace("–", "-")
-    new_note_path = new_note_path.replace("—", "-").replace("–", "-")
+    source_path = _normalize_path(source_path)
+    new_note_path = _normalize_path(new_note_path)
     return _vault_extract_to_new_note(source_path, selection_to_extract, new_note_path, new_note_content)
 
 
@@ -309,6 +339,7 @@ def vault_extract_to_new_note(source_path: str, selection_to_extract: str, new_n
 )
 def vault_get_backlinks(path: str) -> str:
     """Inspect the link graph for a given note."""
+    path = _normalize_path(path)
     return _vault_get_backlinks(path)
 
 
@@ -319,6 +350,7 @@ def vault_get_backlinks(path: str) -> str:
 )
 def vault_delete(path: str, confirm: bool = False) -> str:
     """Delete a file (move to .trash/)."""
+    path = _normalize_path(path)
     inp = VaultDeleteInput(path=path, confirm=confirm)
     return _vault_delete(inp.path, inp.confirm)
 
@@ -353,11 +385,13 @@ def query_vault(
         top_k:       Number of results to return (default 5, max 20).
         rerank:      If True, use Gemini Flash to re-score the top candidates.
                      Enable for complex/ambiguous queries. Adds ~2s latency.
-        expand:      If True, generate query variants via Gemini using a vault
+         expand:      If True, generate query variants via Gemini using a vault
                      knowledge map to improve recall for paraphrased concepts.
         path_filter: Optional vault-relative path prefix to restrict search
                      (e.g. 'projects/' to search only the projects folder).
     """
+    if path_filter:
+        path_filter = _normalize_path(path_filter)
     import json
     from .qmd.db import QMDDatabase
     from .qmd.search_engine import HybridSearchEngine
@@ -529,7 +563,10 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
             slug = str(int(time.time()))
             
         file_name = f"{slug}.md"
-        references_dir = VAULT_PATH / "Library" / "Web"
+        from pathlib import Path
+        from .config import VAULT_RCLONE_PREFIX
+        prefix = VAULT_RCLONE_PREFIX or ""
+        references_dir = VAULT_PATH / prefix / "Library" / "Web"
         references_dir.mkdir(parents=True, exist_ok=True)
         
         file_path = references_dir / file_name
@@ -550,13 +587,13 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
             logger.warning(f"Indexing failed for new reference: {e}")
             return json.dumps({
                 "success": True,
-                "path": f"References/{file_name}",
+                "path": str(Path(prefix) / "Library" / "Web" / file_name),
                 "warning": f"Saved, but indexing failed: {e}"
             })
 
         return json.dumps({
             "success": True,
-            "path": f"References/{file_name}",
+            "path": str(Path(prefix) / "Library" / "Web" / file_name),
             "title": title
         })
 
