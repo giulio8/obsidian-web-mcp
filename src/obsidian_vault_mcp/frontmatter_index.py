@@ -198,6 +198,34 @@ class FrontmatterIndex:
         """Return the frontmatter dict for a given vault-relative path, or None."""
         with self._lock:
             return self._index.get(path)
+    def get_knowledge_map_summary(self, max_tags: int = 50, max_aliases: int = 100) -> str:
+        """Generate a compact summary of vault tags and aliases for SLM context."""
+        tags = set()
+        aliases = set()
+        with self._lock:
+            for fm in self._index.values():
+                # Process tags
+                t = fm.get("tags", [])
+                if isinstance(t, str):
+                    t = [t]
+                elif not isinstance(t, list):
+                    t = []
+                for tag in t:
+                    tags.add(str(tag).strip())
+                    
+                # Process aliases
+                a = fm.get("aliases", [])
+                if isinstance(a, str):
+                    a = [a]
+                elif not isinstance(a, list):
+                    a = []
+                for alias in a:
+                    aliases.add(str(alias).strip())
+                    
+        tags_str = ", ".join(list(tags)[:max_tags])
+        aliases_str = ", ".join(list(aliases)[:max_aliases])
+        
+        return f"Tags: {tags_str}\nAliases: {aliases_str}"
 
     # ── LinkIndex queries ──────────────────────────────────────────────────────
 

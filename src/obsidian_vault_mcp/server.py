@@ -327,7 +327,8 @@ def vault_delete(path: str, confirm: bool = False) -> str:
         "Use this as the PRIMARY method to find relevant notes — prefer it over vault_search "
         "for any conceptual or open-ended question. "
         "Set rerank=True when the query is complex, ambiguous, or multi-concept (adds ~2s latency). "
-        "Set rerank=False (default) for simple keyword lookups."
+        "Set rerank=False (default) for simple keyword lookups.\n"
+        "Set expand=True to enrich the query using a Vault-Aware Knowledge Map (SLM)."
     ),
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
@@ -335,7 +336,7 @@ def query_vault(
     query: str,
     top_k: int = 5,
     rerank: bool = False,
-    expand: bool = True,
+    expand: bool = False,
     path_filter: str | None = None,
 ) -> str:
     """Hybrid semantic search over the vault Knowledge Base.
@@ -345,8 +346,8 @@ def query_vault(
         top_k:       Number of results to return (default 5, max 20).
         rerank:      If True, use Gemini Flash to re-score the top candidates.
                      Enable for complex/ambiguous queries. Adds ~2s latency.
-        expand:      If True (default), generate 1-2 query variants via Gemini
-                     to improve recall for paraphrased concepts.
+        expand:      If True, generate query variants via Gemini using a vault
+                     knowledge map to improve recall for paraphrased concepts.
         path_filter: Optional vault-relative path prefix to restrict search
                      (e.g. 'projects/' to search only the projects folder).
     """
@@ -369,8 +370,12 @@ def query_vault(
 
             engine = HybridSearchEngine(db)
 
-            # Query expansion: generate alternative phrasings for better recall
-            queries = expand_query(query) if expand else None
+            # Query expansion: generate alternative phrasings using Vault Knowledge Map
+            if expand:
+                knowledge_map = frontmatter_index.get_knowledge_map_summary()
+                queries = expand_query(query, knowledge_map=knowledge_map)
+            else:
+                queries = None
 
             # Reranker: only wire it up if the agent requested it
             rerank_fn = rerank_chunks if rerank else None

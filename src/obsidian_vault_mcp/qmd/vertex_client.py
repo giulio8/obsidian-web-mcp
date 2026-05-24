@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 _PROJECT = os.environ.get("GCP_PROJECT_ID", "")
 _REGION = os.environ.get("GCP_REGION", "us-east1")
 _EMBED_MODEL = "text-embedding-005"
-_CHAT_MODEL = "gemini-2.0-flash"
+_CHAT_MODEL = "gemini-2.5-flash"
 
 # Embedding dimensions for text-embedding-005
 EMBED_DIM = 768
@@ -100,7 +100,7 @@ def embed_query(query: str) -> list[float]:
     return results[0] if results else [0.0] * EMBED_DIM
 
 
-def expand_query(query: str) -> list[str]:
+def expand_query(query: str, knowledge_map: str | None = None) -> list[str]:
     """Generate 1-2 alternative phrasings for the query via Gemini Flash.
 
     Used in Phase 3 (query expansion). Returns the original query plus
@@ -108,6 +108,7 @@ def expand_query(query: str) -> list[str]:
 
     Args:
         query: original user query
+        knowledge_map: Optional summary of vault tags and aliases to guide expansion
 
     Returns:
         list of query strings (original always included as first element)
@@ -115,12 +116,23 @@ def expand_query(query: str) -> list[str]:
     try:
         client = _get_genai_client()
 
-        prompt = (
-            "Generate 2 alternative phrasings of the following search query "
-            "that capture the same information need but use different words. "
-            "Output ONLY the two alternatives, one per line, no numbering, no explanation.\n\n"
-            f"Query: {query}"
-        )
+        if knowledge_map:
+            prompt = (
+                "You are an AI search assistant for a personal knowledge base.\n"
+                f"The user is searching for: '{query}'\n\n"
+                "Here is the knowledge map containing the exact terminology (tags and aliases) used in their vault:\n"
+                f"{knowledge_map}\n\n"
+                "Generate 2 alternative phrasings of the search query that capture the same information need. "
+                "CRITICAL: If the query relates to any concept in the knowledge map, you MUST use the exact terms or aliases from the map to maximize search match probability.\n"
+                "Output ONLY the two alternatives, one per line, no numbering, no explanation."
+            )
+        else:
+            prompt = (
+                "Generate 2 alternative phrasings of the following search query "
+                "that capture the same information need but use different words. "
+                "Output ONLY the two alternatives, one per line, no numbering, no explanation.\n\n"
+                f"Query: {query}"
+            )
 
         response = client.models.generate_content(
             model=_CHAT_MODEL,
