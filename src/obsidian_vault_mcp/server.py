@@ -474,8 +474,8 @@ def query_vault(
 @mcp.tool(
     name="vault_save_reference",
     description=(
-        "Scarica una pagina web, ne estrae il contenuto principale pulito (defuddle) e lo salva come file Markdown in /Library/Web/, aggiornando l'indice. "
-        "ATTENZIONE: Prima di operare, DEVI leggere le policy in System/agent.md"
+        "Downloads a web page, extracts its clean main content (defuddle), and saves it as a Markdown file in /Library/Web/, updating the index. "
+        "ATTENTION: Before operating, you MUST read the policies in System/agent.md"
     )
 )
 def vault_save_reference(url: str, title_override: str | None = None) -> str:
@@ -561,20 +561,20 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
 
 @mcp.tool(
     name="vault_sync_context",
-    description="Sincronizza lo stato locale della base di conoscenza con le fonti esterne per garantire la coerenza dei dati."
+    description="Synchronizes the local knowledge base state with external sources to guarantee data consistency."
 )
 def vault_sync_context() -> str:
-    """Forza l'aggiornamento della cache del vault sincronizzando con il cloud."""
+    """Force updating the vault cache by synchronizing with the cloud."""
     from .rclone_sync import sync_vault
     if sync_vault():
         return json.dumps({
             "success": True,
-            "message": "Sincronizzazione completata con successo. La base di conoscenza è ora aggiornata."
+            "message": "Synchronization completed successfully. The knowledge base is now up to date."
         })
     else:
         return json.dumps({
             "success": False,
-            "error": "Errore durante la sincronizzazione della base di conoscenza. Verificare i log del server."
+            "error": "Error during knowledge base synchronization. Check the server logs."
         })
 
 
