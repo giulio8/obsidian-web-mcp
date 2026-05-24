@@ -60,14 +60,23 @@ def test_write_atomic_new_file(vault_dir):
     assert is_new is True
     assert size > 0
     assert (vault_dir / "new-file.md").exists()
-    assert (vault_dir / "new-file.md").read_text() == "# Hello\n\nNew content."
+    
+    import frontmatter
+    post = frontmatter.loads((vault_dir / "new-file.md").read_text())
+    assert "created" in post.metadata
+    assert "modified" in post.metadata
+    assert post.content.strip() == "# Hello\n\nNew content."
 
 
 def test_write_atomic_overwrite(vault_dir):
     """Overwrite an existing file."""
     is_new, _ = write_file_atomic("test-note.md", "Overwritten content.")
     assert is_new is False
-    assert (vault_dir / "test-note.md").read_text() == "Overwritten content."
+    
+    import frontmatter
+    post = frontmatter.loads((vault_dir / "test-note.md").read_text())
+    assert "modified" in post.metadata
+    assert post.content.strip() == "Overwritten content."
 
 
 def test_write_atomic_creates_dirs(vault_dir):
@@ -75,6 +84,7 @@ def test_write_atomic_creates_dirs(vault_dir):
     is_new, _ = write_file_atomic("new-dir/deep/file.md", "Content", create_dirs=True)
     assert is_new is True
     assert (vault_dir / "new-dir" / "deep" / "file.md").exists()
+
 
 
 def test_write_respects_size_limit(vault_dir):
@@ -112,4 +122,8 @@ def test_move_file(vault_dir):
     assert moved is True
     assert not (vault_dir / "source.md").exists()
     assert (vault_dir / "destination.md").exists()
-    assert (vault_dir / "destination.md").read_text() == "Move me."
+    
+    import frontmatter
+    post = frontmatter.loads((vault_dir / "destination.md").read_text())
+    assert post.content.strip() == "Move me."
+

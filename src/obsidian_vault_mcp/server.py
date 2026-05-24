@@ -90,16 +90,19 @@ mcp = FastMCP(
 
 def _normalize_path(path: str) -> str:
     """Normalize path by removing em-dashes and prepending the sandbox prefix if missing."""
-    if not path:
-        return ""
-    path = path.replace("—", "-").replace("–", "-").lstrip("/")
     from .config import VAULT_RCLONE_PREFIX
+    if not path:
+        return VAULT_RCLONE_PREFIX or ""
+    path = path.replace("—", "-").replace("–", "-").lstrip("/")
+    if not path:
+        return VAULT_RCLONE_PREFIX or ""
     if VAULT_RCLONE_PREFIX:
         from pathlib import Path
         p = Path(path)
         if not p.parts or p.parts[0] != VAULT_RCLONE_PREFIX:
             path = str(Path(VAULT_RCLONE_PREFIX) / path)
     return path
+
 
 from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
 from .tools.write import vault_write as _vault_write, vault_batch_frontmatter_update as _vault_batch_frontmatter_update
