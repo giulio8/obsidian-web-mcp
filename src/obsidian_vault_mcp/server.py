@@ -186,23 +186,7 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
     return _vault_batch_frontmatter_update(inp.updates)
 
 
-@mcp.tool(
-    name="vault_search",
-    description="Search for text across vault files. Uses ripgrep if available, falls back to Python. Returns matching lines with context and frontmatter excerpts. CRITICAL: Technical notes are in English, personal notes in Italian. Agents MUST query in English for technical/architectural topics.",
-    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-)
-def vault_search(
-    query: str,
-    path_prefix: str | None = None,
-    file_pattern: str = "*.md",
-    max_results: int = 20,
-    context_lines: int = 2,
-) -> str:
-    """Search vault file contents."""
-    if path_prefix:
-        path_prefix = _normalize_path(path_prefix)
-    inp = VaultSearchInput(query=query, path_prefix=path_prefix, file_pattern=file_pattern, max_results=max_results, context_lines=context_lines)
-    return _vault_search(inp.query, inp.path_prefix, inp.file_pattern, inp.max_results, inp.context_lines)
+
 
 
 @mcp.tool(
@@ -359,49 +343,71 @@ def vault_delete(path: str, confirm: bool = False) -> str:
 
 
 @mcp.tool(
-    name="query_vault",
+    name="vault_search",
     description=(
-        "Hybrid semantic + keyword search across the Obsidian Knowledge Base. "
-        "Combines BM25 full-text search with vector similarity (Vertex AI embeddings) "
-        "and Reciprocal Rank Fusion for high-quality retrieval. "
-        "Use this as the PRIMARY method to find relevant notes — prefer it over vault_search "
-        "for any conceptual or open-ended question. "
-        "Set rerank=True when the query is complex, ambiguous, or multi-concept (adds ~2s latency). "
-        "Set rerank=False (default) for simple keyword lookups.\n"
-        "Set expand=True to enrich the query using a Vault-Aware Knowledge Map (SLM).\n"
-        "CRITICAL: Technical notes are in English, personal notes in Italian. "
-        "Agents MUST query in English for technical/architectural topics."
+        "Search across the Obsidian Knowledge Base. Supports both semantic/hybrid search and classical exact search.\n"
+        "By default (semantic=True), it performs a Hybrid semantic + keyword search combining BM25 full-text search with vector similarity (Vertex AI embeddings) and Reciprocal Rank Fusion.\n"
+        "When semantic=False, it performs a classical exact text search using ripgrep/Python (equivalent to the old search).\n"
+        "CRITICAL: Technical notes are in English, personal notes in Italian. Agents MUST query in English for technical/architectural topics."
     ),
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
-def query_vault(
+def vault_search(
     query: str,
+    semantic: bool = True,
     top_k: int = 5,
     rerank: bool = False,
     expand: bool = False,
-    path_filter: str | None = None,
+    path_prefix: str | None = None,
+    file_pattern: str = "*.md",
+    max_results: int = 20,
+    context_lines: int = 2,
 ) -> str:
-    """Hybrid semantic search over the vault Knowledge Base.
+    """Search the vault.
 
     Args:
-        query:       Natural language query or keyword string.
-        top_k:       Number of results to return (default 5, max 20).
-        rerank:      If True, use Gemini Flash to re-score the top candidates.
-                     Enable for complex/ambiguous queries. Adds ~2s latency.
-         expand:      If True, generate query variants via Gemini using a vault
-                     knowledge map to improve recall for paraphrased concepts.
-        path_filter: Optional vault-relative path prefix to restrict search
-                     (e.g. 'projects/' to search only the projects folder).
+        query:         Natural language query or exact keyword string.
+        semantic:      If True (default), perform high-quality hybrid semantic search.
+                       If False, perform classical exact string search (ripgrep/python).
+        top_k:         Number of results to return (semantic search only, default 5, max 20).
+        rerank:        If True, re-score candidates using Gemini Flash (semantic search only).
+        expand:        If True, generate query variants via Gemini using a vault knowledge map (semantic search only).
+        path_prefix:   Optional path prefix to restrict the search (e.g. 'projects/').
+        file_pattern:  Glob pattern for classical search (default '*.md').
+        max_results:   Maximum results for classical search (default 20).
+        context_lines: Number of surrounding lines to show for classical search (default 2).
     """
-    if path_filter:
-        path_filter = _normalize_path(path_filter)
+    if path_prefix:
+        path_prefix = _normalize_path(path_prefix)
+    
+    inp = VaultSearchInput(
+        query=query,
+        semantic=semantic,
+        top_k=top_k,
+        rerank=rerank,
+        expand=expand,
+        path_prefix=path_prefix,
+        file_pattern=file_pattern,
+        max_results=max_results,
+        context_lines=context_lines,
+    )
+
+    if not inp.semantic:
+        return _vault_search(
+            inp.query,
+            inp.path_prefix,
+            inp.file_pattern,
+            inp.max_results,
+            inp.context_lines,
+        )
+
     import json
     from .qmd.db import QMDDatabase
     from .qmd.search_engine import HybridSearchEngine
     from .qmd.vertex_client import embed_query, expand_query, rerank_chunks
     from .retention_engine import compute_retention, DEFAULT_CONFIG as DECAY_CONFIG
 
-    top_k = max(1, min(top_k, 20))  # clamp
+    top_k_val = max(1, min(inp.top_k, 20))  # clamp
 
     try:
         with QMDDatabase() as db:
@@ -415,14 +421,14 @@ def query_vault(
             engine = HybridSearchEngine(db)
 
             # Query expansion: generate alternative phrasings using Vault Knowledge Map
-            if expand:
+            if inp.expand:
                 knowledge_map = frontmatter_index.get_knowledge_map_summary()
-                queries = expand_query(query, knowledge_map=knowledge_map)
+                queries = expand_query(inp.query, knowledge_map=knowledge_map)
             else:
                 queries = None
 
             # Reranker: only wire it up if the agent requested it
-            rerank_fn = rerank_chunks if rerank else None
+            rerank_fn = rerank_chunks if inp.rerank else None
 
             def get_links(p: str) -> tuple[set[str], set[str]]:
                 fwd = frontmatter_index.get_forward_links(p)
@@ -430,8 +436,8 @@ def query_vault(
                 return fwd, back
 
             results = engine.search(
-                query=query,
-                top_k=top_k,
+                query=inp.query,
+                top_k=top_k_val,
                 queries=queries[1:] if queries else None,  # extras only, primary is first
                 embed_fn=embed_query,
                 rerank_fn=rerank_fn,
@@ -473,8 +479,8 @@ def query_vault(
 
 
             # Apply path filter post-retrieval (simple prefix match)
-            if path_filter:
-                results = [r for r in results if r.doc_path.startswith(path_filter)]
+            if inp.path_prefix:
+                results = [r for r in results if r.doc_path.startswith(inp.path_prefix)]
 
             output = [
                 {
@@ -500,16 +506,16 @@ def query_vault(
                 pass  # tracking must never break queries
 
             return json.dumps({
-                "query": query,
+                "query": inp.query,
                 "expanded_queries": queries[1:] if queries else [],
-                "reranked": rerank,
+                "reranked": inp.rerank,
                 "total": len(output),
                 "index_stats": {"chunks": stats["chunks"], "documents": stats["documents"]},
                 "results": output,
             }, ensure_ascii=False)
 
     except Exception as e:
-        logger.error(f"query_vault error: {e}")
+        logger.error(f"vault_search error: {e}")
         return json.dumps({"error": str(e), "results": []})
 
 

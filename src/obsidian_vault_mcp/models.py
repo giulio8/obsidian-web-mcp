@@ -125,15 +125,33 @@ class VaultDeleteInput(BaseModel):
 
 
 class VaultSearchInput(BaseModel):
-    """Full-text search across vault files."""
+    """Search across the Obsidian Knowledge Base (semantic or classical)."""
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     query: str = Field(
         ...,
-        description="Search string to find in file contents",
+        description="Search string or natural language query",
         min_length=1,
         max_length=200,
+    )
+    semantic: bool = Field(
+        default=True,
+        description="If true, perform hybrid semantic search. If false, perform classical exact search.",
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Number of results to return (semantic search only)",
+    )
+    rerank: bool = Field(
+        default=False,
+        description="If true, re-score candidates using Gemini Flash (semantic search only)",
+    )
+    expand: bool = Field(
+        default=False,
+        description="If true, generate query variants via Vault Knowledge Map (semantic search only)",
     )
     path_prefix: str | None = Field(
         default=None,
@@ -142,20 +160,20 @@ class VaultSearchInput(BaseModel):
     )
     file_pattern: str = Field(
         default="*.md",
-        description="Glob pattern for files to search (e.g. '*.md', '*.canvas')",
+        description="Glob pattern for files to search (classical search only)",
         max_length=50,
     )
     max_results: int = Field(
         default=DEFAULT_SEARCH_RESULTS,
         ge=1,
         le=MAX_SEARCH_RESULTS,
-        description="Maximum number of matching files to return",
+        description="Maximum number of matching files to return (classical search only)",
     )
     context_lines: int = Field(
         default=CONTEXT_LINES,
         ge=0,
         le=10,
-        description="Number of lines of context to show around each match",
+        description="Number of lines of context to show around each match (classical search only)",
     )
 
 

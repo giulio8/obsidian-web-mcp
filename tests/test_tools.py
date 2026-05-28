@@ -74,3 +74,12 @@ def test_vault_delete_requires_confirm(vault_dir):
     result = json.loads(vault_delete("delete-me.md", confirm=False))
     assert "error" in result
     assert (vault_dir / "delete-me.md").exists()  # still there
+
+
+def test_unified_vault_search_classical(vault_dir):
+    """Test unified vault_search from server module running with semantic=False."""
+    from obsidian_vault_mcp.server import vault_search as unified_search
+    result = json.loads(unified_search("test note", semantic=False))
+    assert result["total_matches"] >= 1
+    assert result["results"][0]["path"] == "test-note.md"
+

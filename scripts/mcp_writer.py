@@ -35,14 +35,14 @@ tags:
   - search
 aliases:
   - Motore di Ricerca Ibrido
-  - query_vault
+  - vault_search
 ---
 # Motore di Ricerca Ibrido (Hybrid Search)
 
 Il cuore "intelligente" dell'integrazione è rappresentato dal motore di ricerca ibrido implementato all'interno del modulo `qmd/` (Quantitative Markdown Database).
 
 ## Architettura di Ricerca
-Il tool principale, `query_vault`, combina diverse tecniche di information retrieval:
+Il tool principale, `vault_search` (con `semantic=True`), combina diverse tecniche di information retrieval:
 1. **Keyword Search (BM25)**: Utilizza SQLite FTS5 per una ricerca testuale esatta, con sanitizzazione dei caratteri speciali.
 2. **Semantic Search (Vector)**: Utilizza embeddings generati tramite **Vertex AI** (`embed_query`) salvati e ricercati tramite l'estensione `sqlite-vec`.
 3. **Query Expansion (Gemini)**: Se abilitato (`expand=True`), il server invoca Gemini per generare formulazioni alternative della query dell'utente, migliorando drasticamente la *recall*.
