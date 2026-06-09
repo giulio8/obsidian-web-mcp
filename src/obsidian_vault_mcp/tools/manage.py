@@ -6,6 +6,7 @@ import re
 
 from ..vault import list_directory, move_path, delete_path, resolve_vault_path
 from ..rclone_sync import push_file, push_deleted
+from ..json_utils import json_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +33,15 @@ def vault_list(
             include_dirs=include_dirs,
             pattern=pattern,
         )
-        return json.dumps({"items": items, "total": len(items)})
+        return json_dumps({"items": items, "total": len(items)})
     except ValueError as e:
-        return json.dumps({"error": str(e)})
+        return json_dumps({"error": str(e)})
     except FileNotFoundError:
-        return json.dumps({"error": f"Directory not found: {path}"})
+        return json_dumps({"error": f"Directory not found: {path}"})
     except Exception as e:
         logger.error(f"vault_list error: {e}")
-        return json.dumps({"error": str(e)})
+        return json_dumps({"error": str(e)})
+
 
 
 def vault_move(
@@ -102,7 +104,7 @@ def vault_move(
         if moved:
             frontmatter_index.rename_in_graph(source, destination)
 
-        return json.dumps({
+        return json_dumps({
             "source": source,
             "destination": destination,
             "moved": moved,
@@ -111,16 +113,16 @@ def vault_move(
         })
 
     except ValueError as e:
-        return json.dumps({"error": str(e), "source": source, "destination": destination})
+        return json_dumps({"error": str(e), "source": source, "destination": destination})
     except Exception as e:
         logger.error(f"vault_move error: {e}")
-        return json.dumps({"error": str(e), "source": source, "destination": destination})
+        return json_dumps({"error": str(e), "source": source, "destination": destination})
 
 
 def vault_delete(path: str, confirm: bool = False) -> str:
     """Delete a file by moving it to .trash/ in the vault."""
     if not confirm:
-        return json.dumps({
+        return json_dumps({
             "error": "Set confirm=true to execute deletion. Files are moved to .trash/, not hard deleted.",
             "path": path,
         })
@@ -129,12 +131,13 @@ def vault_delete(path: str, confirm: bool = False) -> str:
         deleted = delete_path(path)
         if deleted:
             push_deleted(path)
-        return json.dumps({"path": path, "deleted": deleted})
+        return json_dumps({"path": path, "deleted": deleted})
     except ValueError as e:
-        return json.dumps({"error": str(e), "path": path})
+        return json_dumps({"error": str(e), "path": path})
     except Exception as e:
         logger.error(f"vault_delete error: {e}")
-        return json.dumps({"error": str(e), "path": path})
+        return json_dumps({"error": str(e), "path": path})
+
 
 
 def vault_get_backlinks(path: str) -> str:
@@ -153,7 +156,7 @@ def vault_get_backlinks(path: str) -> str:
     try:
         backlinks = sorted(frontmatter_index.get_backlinks(path))
         forward_links = sorted(frontmatter_index.get_forward_links(path))
-        return json.dumps({
+        return json_dumps({
             "path": path,
             "backlinks": backlinks,
             "backlink_count": len(backlinks),
@@ -162,7 +165,8 @@ def vault_get_backlinks(path: str) -> str:
         })
     except Exception as e:
         logger.error(f"vault_get_backlinks error: {e}")
-        return json.dumps({"error": str(e), "path": path})
+        return json_dumps({"error": str(e), "path": path})
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

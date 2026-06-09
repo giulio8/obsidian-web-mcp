@@ -19,6 +19,7 @@ import frontmatter as fm_lib
 
 from ..vault import read_file, write_file_atomic, resolve_vault_path
 from ..rclone_sync import push_file
+from ..json_utils import json_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +45,11 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
     try:
         content, _ = read_file(path)
     except FileNotFoundError:
-        return json.dumps({"error": f"File not found: {path}"})
+        return json_dumps({"error": f"File not found: {path}"})
 
     count = content.count(old_str)
     if count == 0:
-        return json.dumps({
+        return json_dumps({
             "error": (
                 "old_str not found in file. "
                 "Check for whitespace differences or add more surrounding context."
@@ -56,7 +57,7 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
             "path": path,
         })
     if count > 1:
-        return json.dumps({
+        return json_dumps({
             "error": (
                 f"old_str appears {count} times in the file — ambiguous replacement. "
                 "Add more surrounding lines to make it unique."
@@ -71,7 +72,7 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
         is_new, size = write_file_atomic(path, new_content)
         push_file(path)
     except Exception as e:
-        return json.dumps({"error": str(e), "path": path})
+        return json_dumps({"error": str(e), "path": path})
 
     # Build a compact diff summary for the agent
     old_lines = old_str.splitlines()
@@ -80,12 +81,13 @@ def vault_patch(path: str, old_str: str, new_str: str) -> str:
         [f"- {l}" for l in old_lines] +
         [f"+ {l}" for l in new_lines]
     )
-    return json.dumps({
+    return json_dumps({
         "path": path,
         "patched": True,
         "diff": "\n".join(diff_lines[:40]),  # cap at 40 lines
         "size": size,
     })
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ def vault_append(
         existing_content, _ = read_file(path)
     except FileNotFoundError:
         if not create_if_missing:
-            return json.dumps({"error": f"File not found: {path}"})
+            return json_dumps({"error": f"File not found: {path}"})
         existing_content = ""
 
     if after_section is None:
@@ -142,7 +144,7 @@ def vault_append(
                 break
 
         if insert_pos is None:
-            return json.dumps({
+            return json_dumps({
                 "error": f"Section not found: {after_section!r}",
                 "path": path,
             })
@@ -156,14 +158,15 @@ def vault_append(
         is_new, size = write_file_atomic(path, new_content, create_dirs=True)
         push_file(path)
     except Exception as e:
-        return json.dumps({"error": str(e), "path": path})
+        return json_dumps({"error": str(e), "path": path})
 
-    return json.dumps({
+    return json_dumps({
         "path": path,
         "created": is_new,
         "appended_bytes": len(content.encode()),
         "total_size": size,
     })
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,7 +225,7 @@ def vault_batch_write(files: list[dict]) -> str:
 
     total = len(results)
     failed = sum(1 for r in results if "error" in r)
-    return json.dumps({
+    return json_dumps({
         "total": total,
         "succeeded": total - failed,
         "failed": failed,
@@ -251,17 +254,17 @@ def vault_extract_to_new_note(
     try:
         content, _ = read_file(source_path)
     except FileNotFoundError:
-        return json.dumps({"error": f"Source file not found: {source_path}"})
+        return json_dumps({"error": f"Source file not found: {source_path}"})
 
     if selection_to_extract not in content:
-        return json.dumps({
+        return json_dumps({
             "error": "selection_to_extract not found in source file. Check for whitespace differences.",
             "path": source_path,
         })
     
     # We replace only the first occurrence
     if content.count(selection_to_extract) > 1:
-        return json.dumps({
+        return json_dumps({
             "error": "selection_to_extract appears multiple times. Add more surrounding context to make it unique.",
             "path": source_path,
         })
@@ -279,12 +282,13 @@ def vault_extract_to_new_note(
         is_new, size = write_file_atomic(new_note_path, final_new_note_content, create_dirs=True)
         push_file(new_note_path)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return json_dumps({"error": str(e)})
 
-    return json.dumps({
+    return json_dumps({
         "extracted": True,
         "source_path": source_path,
         "new_note_path": new_note_path,
         "new_note_created": is_new,
         "size": size,
     })
+

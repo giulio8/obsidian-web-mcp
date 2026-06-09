@@ -83,3 +83,25 @@ def test_unified_vault_search_classical(vault_dir):
     assert result["total_matches"] >= 1
     assert result["results"][0]["path"] == "test-note.md"
 
+
+def test_date_serialization_bug(vault_dir):
+    """Test date serialization bug in vault_read, vault_search, and vault_search_frontmatter."""
+    # Create a file with a date in the frontmatter
+    date_file = vault_dir / "date-test.md"
+    date_file.write_text("---\ntitle: Date Test\ndate: 2026-06-09\nlast_modified: 2026-06-09T21:03:02\n---\n\nThis is a note with dates in frontmatter.")
+
+    # 1. Test vault_read
+    result_read = json.loads(vault_read("date-test.md"))
+    assert "error" not in result_read
+    assert result_read["frontmatter"]["date"] == "2026-06-09"
+
+    # 2. Test vault_search (which reads frontmatter_excerpt)
+    result_search = json.loads(vault_search("dates in frontmatter"))
+    assert "error" not in result_search
+    
+    # 3. Test vault_search_frontmatter
+    from obsidian_vault_mcp.tools.search import vault_search_frontmatter
+    result_fm = json.loads(vault_search_frontmatter("title", "Date Test"))
+    assert "error" not in result_fm
+
+

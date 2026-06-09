@@ -47,6 +47,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from .config import VAULT_MCP_PORT, VAULT_MCP_TOKEN, VAULT_MCP_HOST, VAULT_MCP_HOSTNAME, VAULT_PATH
 from .frontmatter_index import FrontmatterIndex
 from .access_tracker import AccessTracker
+from .json_utils import json_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -413,10 +414,11 @@ def vault_search(
         with QMDDatabase() as db:
             stats = db.stats()
             if stats["chunks"] == 0:
-                return json.dumps({
+                return json_dumps({
                     "error": "QMD index is empty. Run: uv run qmd-index --full --vault <path>",
                     "results": [],
                 })
+
 
             engine = HybridSearchEngine(db)
 
@@ -505,18 +507,19 @@ def vault_search(
             except Exception:
                 pass  # tracking must never break queries
 
-            return json.dumps({
+            return json_dumps({
                 "query": inp.query,
                 "expanded_queries": queries[1:] if queries else [],
                 "reranked": inp.rerank,
                 "total": len(output),
                 "index_stats": {"chunks": stats["chunks"], "documents": stats["documents"]},
                 "results": output,
-            }, ensure_ascii=False)
+            })
 
     except Exception as e:
         logger.error(f"vault_search error: {e}")
-        return json.dumps({"error": str(e), "results": []})
+        return json_dumps({"error": str(e), "results": []})
+
 
 
 @mcp.tool(
@@ -538,7 +541,7 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
     try:
         downloaded = trafilatura.fetch_url(url)
         if not downloaded:
-            return json.dumps({"error": f"Failed to download URL: {url}"})
+            return json_dumps({"error": f"Failed to download URL: {url}"})
 
         # Extract markdown, include links, no images to keep it clean
         extracted = trafilatura.extract(
@@ -549,7 +552,8 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
             include_formatting=True
         )
         if not extracted:
-            return json.dumps({"error": "Failed to extract content (maybe not an article?)"})
+            return json_dumps({"error": "Failed to extract content (maybe not an article?)"})
+
 
         metadata = trafilatura.extract_metadata(downloaded)
         title = title_override or (metadata.title if metadata and metadata.title else "Untitled Reference")
@@ -594,13 +598,13 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
                 indexer.run_delta()
         except Exception as e:
             logger.warning(f"Indexing failed for new reference: {e}")
-            return json.dumps({
+            return json_dumps({
                 "success": True,
                 "path": str(Path(prefix) / "Library" / "Web" / file_name),
                 "warning": f"Saved, but indexing failed: {e}"
             })
 
-        return json.dumps({
+        return json_dumps({
             "success": True,
             "path": str(Path(prefix) / "Library" / "Web" / file_name),
             "title": title
@@ -608,7 +612,7 @@ def vault_save_reference(url: str, title_override: str | None = None) -> str:
 
     except Exception as e:
         logger.error(f"vault_save_reference error: {e}")
-        return json.dumps({"error": str(e)})
+        return json_dumps({"error": str(e)})
 
 
 @mcp.tool(
@@ -620,15 +624,16 @@ def vault_sync_context() -> str:
     """Force updating the vault cache by synchronizing with the cloud."""
     from .rclone_sync import sync_vault
     if sync_vault():
-        return json.dumps({
+        return json_dumps({
             "success": True,
             "message": "Synchronization completed successfully. The knowledge base is now up to date."
         })
     else:
-        return json.dumps({
+        return json_dumps({
             "success": False,
             "error": "Error during knowledge base synchronization. Check the server logs."
         })
+
 
 
 def main():
