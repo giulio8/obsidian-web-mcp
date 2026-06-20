@@ -42,6 +42,21 @@ RERANK_CANDIDATES = 30
 
 
 @dataclass
+class SubQuery:
+    """A single routing target for the vault query router.
+
+    Produced by route_query() (vertex_client.py). The search engine
+    executes each SubQuery with its own path_prefix so BM25 and vector
+    search are scoped to the right vault section before RRF fusion.
+
+    path_prefix=None means a global sweep across the entire vault.
+    """
+    query: str
+    path_prefix: str | None = None  # e.g. "second-brain/Timeline/2026/06"
+    weight: float = 1.0
+
+
+@dataclass
 class SearchResult:
     """A single result from the hybrid search pipeline."""
     chunk_id: int
@@ -79,7 +94,7 @@ class HybridSearchEngine:
         self,
         query: str,
         top_k: int = 5,
-        queries: list[str] | None = None,
+        sub_queries: list[SubQuery] | None = None,
         embed_fn: Callable[[str], list[float]] | None = None,
         rerank_fn: Callable[[str, list[str]], list[float]] | None = None,
         get_links_fn: Callable[[str], tuple[set[str], set[str]]] | None = None,
@@ -91,44 +106,63 @@ class HybridSearchEngine:
         Args:
             query:        Primary query string (always weighted ×2 in RRF)
             top_k:        Number of results to return
-            queries:      Additional query variants (e.g. from query expansion).
-                          If None, only the primary query is used.
+            sub_queries:  Routing targets from route_query(). Each SubQuery carries
+                          its own path_prefix and weight. If None, only the primary
+                          query is used with a global sweep.
             embed_fn:     Function(text) → vector. If None, vector search is skipped.
             rerank_fn:    Function(query, [texts]) → [score]. Optional reranker.
             get_links_fn: Function(path) → (forward_links, backlinks). If provided,
                           adds a third graph-based stream expanding from top hits.
-            bm25_limit:   How many BM25 candidates to gather per query variant
-            vector_limit: How many vector candidates to gather per query variant
+            bm25_limit:   How many BM25 candidates to gather per sub-query
+            vector_limit: How many vector candidates to gather per sub-query
 
         Returns:
             List of SearchResult sorted by descending score, length ≤ top_k
         """
-        all_queries = [query] + (queries or [])
+        # Build the list of (sub_query, weight) pairs to execute.
+        # Primary query always gets weight 2.0; sub-queries use their own weight.
+        targets: list[SubQuery] = [SubQuery(query=query, path_prefix=None, weight=2.0)]
+        if sub_queries:
+            targets.extend(sub_queries)
 
-        # Collect ranked lists from each backend for each query variant
+        # Collect ranked lists from each backend for each sub-query
         ranked_lists: list[tuple[list[dict], float, str]] = []  # (results, weight, source_tag)
 
-        for i, q in enumerate(all_queries):
-            weight = 2.0 if i == 0 else 1.0  # primary query gets double weight
+        for sq in targets:
+            weight = sq.weight
 
-            # BM25 search
-            bm25_results = self._safe_bm25(q, bm25_limit)
+            # BM25 search — scoped to prefix if provided
+            if sq.path_prefix:
+                bm25_results = self._safe_bm25(
+                    sq.query, bm25_limit, path_prefix=sq.path_prefix
+                )
+            else:
+                bm25_results = self._safe_bm25(sq.query, bm25_limit)
             if bm25_results:
                 ranked_lists.append((bm25_results, weight, "bm25"))
-                logger.debug(f"BM25[{i}] '{q[:40]}': {len(bm25_results)} results")
+                logger.debug(
+                    f"BM25[prefix={sq.path_prefix!r}] '{sq.query[:40]}': "
+                    f"{len(bm25_results)} results"
+                )
 
-            # Vector search (only if embedding function provided)
+            # Vector search — scoped to prefix if provided, else global KNN
             if embed_fn is not None:
                 try:
-                    vec = embed_fn(q)
-                    vector_results = self.db.vector_search(vec, vector_limit)
+                    vec = embed_fn(sq.query)
+                    if sq.path_prefix:
+                        vector_results = self.db.vector_search_prefix(
+                            vec, sq.path_prefix, vector_limit
+                        )
+                    else:
+                        vector_results = self.db.vector_search(vec, vector_limit)
                     if vector_results:
                         ranked_lists.append((vector_results, weight, "vec"))
                         logger.debug(
-                            f"Vec[{i}] '{q[:40]}': {len(vector_results)} results"
+                            f"Vec[prefix={sq.path_prefix!r}] '{sq.query[:40]}': "
+                            f"{len(vector_results)} results"
                         )
                 except Exception as e:
-                    logger.warning(f"Vector search failed for query {i}: {e}")
+                    logger.warning(f"Vector search failed for sub-query '{sq.query[:40]}': {e}")
 
         if not ranked_lists:
             logger.warning("No results from any backend")
@@ -296,12 +330,15 @@ class HybridSearchEngine:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _safe_bm25(self, query: str, limit: int) -> list[dict]:
+    def _safe_bm25(self, query: str, limit: int, path_prefix: str | None = None) -> list[dict]:
         """BM25 search with FTS5 special-char sanitisation.
 
         FTS5 treats several chars as operators: " * ^ - + ( ) AND OR NOT.
         Strip punctuation so we never hit a syntax error, then try a
         quoted phrase first, falling back to individual AND'd terms.
+
+        If path_prefix is provided, delegates to bm25_search_prefix() for
+        prefix-scoped retrieval.
         """
         # Remove chars that FTS5 parses as operators (keep letters, digits, spaces)
         sanitised = re.sub(r'[^\w\s]', ' ', query, flags=re.UNICODE).strip()
@@ -309,11 +346,17 @@ class HybridSearchEngine:
             return []
 
         try:
-            # Quoted phrase search (exact word-order)
-            results = self.db.bm25_search(f'"{sanitised}"', limit)
-            if not results:
-                # Fallback: AND of individual terms
-                results = self.db.bm25_search(sanitised, limit)
+            if path_prefix:
+                # Quoted phrase first, fallback to AND terms, both prefix-scoped
+                results = self.db.bm25_search_prefix(f'"{sanitised}"', path_prefix, limit)
+                if not results:
+                    results = self.db.bm25_search_prefix(sanitised, path_prefix, limit)
+            else:
+                # Quoted phrase search (exact word-order)
+                results = self.db.bm25_search(f'"{sanitised}"', limit)
+                if not results:
+                    # Fallback: AND of individual terms
+                    results = self.db.bm25_search(sanitised, limit)
             return results
         except Exception as e:
             logger.warning(f"BM25 search failed for '{query}': {e}")

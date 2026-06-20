@@ -115,6 +115,7 @@ class VaultIndexer:
                     header_path=chunk.header_path,
                     char_offset=chunk.char_offset,
                     text=chunk.text,
+                    doc_path=rel_path,
                 )
                 self.db.insert_vector(chunk_id, emb)
                 stats.chunks_added += 1

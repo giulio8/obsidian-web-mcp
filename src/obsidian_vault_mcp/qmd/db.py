@@ -91,8 +91,11 @@ CREATE TABLE IF NOT EXISTS chunks (
     chunk_index  INTEGER NOT NULL,
     header_path  TEXT NOT NULL DEFAULT '',
     char_offset  INTEGER NOT NULL DEFAULT 0,
-    text         TEXT NOT NULL
+    text         TEXT NOT NULL,
+    doc_path     TEXT NOT NULL DEFAULT ''  -- denormalized from documents.path for O(1) prefix filter
 );
+
+CREATE INDEX IF NOT EXISTS idx_chunks_doc_path ON chunks(doc_path);
 
 -- FTS5 index for BM25 keyword search
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -157,6 +160,9 @@ class QMDDatabase:
 
         # Apply base schema
         self._conn.executescript(_SCHEMA)
+
+        # Migration: add doc_path column to chunks if not present (one-time, idempotent)
+        self._migrate_add_doc_path()
 
         # Create vector table if extension loaded
         if self._vec_enabled:
@@ -246,6 +252,24 @@ class QMDDatabase:
 
     # ── Chunk storage ─────────────────────────────────────────────────────────
 
+    def _migrate_add_doc_path(self) -> None:
+        """Idempotent migration: add doc_path column + index to chunks if absent."""
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(chunks)")}
+        if "doc_path" not in cols:
+            logger.info("Migration: adding doc_path column to chunks table")
+            self.conn.execute("ALTER TABLE chunks ADD COLUMN doc_path TEXT NOT NULL DEFAULT ''")
+            # Backfill from documents table
+            self.conn.execute(
+                """
+                UPDATE chunks SET doc_path = (
+                    SELECT path FROM documents WHERE documents.id = chunks.doc_id
+                )
+                """
+            )
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_path ON chunks(doc_path)")
+            self.conn.commit()
+            logger.info("Migration complete: doc_path backfilled and indexed")
+
     def insert_chunk(
         self,
         doc_id: int,
@@ -253,14 +277,15 @@ class QMDDatabase:
         header_path: str,
         char_offset: int,
         text: str,
+        doc_path: str = "",
     ) -> int:
         """Insert a chunk row. Returns chunk_id."""
         cur = self.conn.execute(
             """
-            INSERT INTO chunks (doc_id, chunk_index, header_path, char_offset, text)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO chunks (doc_id, chunk_index, header_path, char_offset, text, doc_path)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (doc_id, chunk_index, header_path, char_offset, text),
+            (doc_id, chunk_index, header_path, char_offset, text, doc_path),
         )
         return cur.lastrowid  # type: ignore[return-value]
 
@@ -332,6 +357,109 @@ class QMDDatabase:
             (query, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def bm25_search_prefix(
+        self, query: str, path_prefix: str, limit: int = 20
+    ) -> list[dict]:
+        """BM25 keyword search restricted to a vault path prefix.
+
+        Uses the denormalized doc_path column on chunks for an efficient
+        pre-filter before BM25 scoring — same pattern as Pinecone/Qdrant
+        metadata pre-filtering.
+        """
+        rows = self.conn.execute(
+            """
+            SELECT
+                c.id              AS chunk_id,
+                d.path            AS doc_path,
+                d.title           AS doc_title,
+                c.text            AS text,
+                c.header_path     AS header_path,
+                c.char_offset     AS char_offset,
+                -bm25(chunks_fts) AS score
+            FROM chunks_fts
+            JOIN chunks c ON c.id = chunks_fts.rowid
+            JOIN documents d ON d.id = c.doc_id
+            WHERE chunks_fts MATCH ?
+              AND c.doc_path LIKE ?
+            ORDER BY score DESC
+            LIMIT ?
+            """,
+            (query, path_prefix.rstrip("/") + "/%", limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def vector_search_prefix(
+        self,
+        embedding: list[float],
+        path_prefix: str,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Cosine similarity search restricted to a vault path prefix.
+
+        Implements the production-grade pre-filter + in-memory KNN pattern
+        (Qdrant payload filter, MongoDB Atlas pre-filter, Pinecone metadata
+        filter). Steps:
+          1. Fetch all (chunk_id, embedding) blobs for the prefix subset — O(n_subset)
+          2. Compute cosine similarity in Python/struct — trivial for typical subset sizes
+             (e.g. Timeline/2026/06/ ≈ 100 chunks × 768 dims = ~300KB)
+          3. Return top-k sorted by score
+
+        Falls back to empty list if sqlite-vec is unavailable or subset is empty.
+        """
+        if not self._vec_enabled or not embedding:
+            return []
+
+        import struct as _struct
+        import math as _math
+
+        prefix_pattern = path_prefix.rstrip("/") + "/%"
+
+        # Step 1: fetch chunk_ids + raw embedding blobs for the prefix subset
+        rows = self.conn.execute(
+            """
+            SELECT
+                cv.chunk_id,
+                cv.embedding,
+                d.path    AS doc_path,
+                d.title   AS doc_title,
+                c.text    AS text,
+                c.header_path AS header_path,
+                c.char_offset AS char_offset
+            FROM chunk_vectors cv
+            JOIN chunks c ON c.id = cv.chunk_id
+            JOIN documents d ON d.id = c.doc_id
+            WHERE c.doc_path LIKE ?
+            """,
+            (prefix_pattern,),
+        ).fetchall()
+
+        if not rows:
+            return []
+
+        # Step 2: compute cosine similarity in Python
+        n = len(embedding)
+        q_norm = _math.sqrt(sum(x * x for x in embedding))
+        if q_norm == 0:
+            return []
+
+        scored: list[tuple[float, dict]] = []
+        for row in rows:
+            blob = row["embedding"]
+            vec = list(_struct.unpack(f"{len(blob) // 4}f", blob))
+            dot = sum(a * b for a, b in zip(embedding, vec))
+            v_norm = _math.sqrt(sum(x * x for x in vec))
+            cosine = dot / (q_norm * v_norm) if v_norm > 0 else 0.0
+            # Convert to 0-1 score (cosine is already in [-1, 1]; notes are positive)
+            score = (cosine + 1.0) / 2.0
+            scored.append((score, dict(row)))
+
+        # Step 3: top-k
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [
+            {**item, "score": score}
+            for score, item in scored[:limit]
+        ]
 
     def vector_search(
         self, embedding: list[float], limit: int = 20

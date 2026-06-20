@@ -347,8 +347,12 @@ def vault_delete(path: str, confirm: bool = False) -> str:
     name="vault_search",
     description=(
         "Search across the Obsidian Knowledge Base. Supports both semantic/hybrid search and classical exact search.\n"
-        "By default (semantic=True), it performs a Hybrid semantic + keyword search combining BM25 full-text search with vector similarity (Vertex AI embeddings) and Reciprocal Rank Fusion.\n"
+        "By default (semantic=True), it performs a Hybrid semantic + keyword search combining BM25 full-text search "
+        "with vector similarity (Vertex AI embeddings) and Reciprocal Rank Fusion.\n"
         "When semantic=False, it performs a classical exact text search using ripgrep/Python (equivalent to the old search).\n"
+        "By default (expand=True), an SLM-based vault router decomposes the query into targeted sub-searches, "
+        "each scoped to the correct vault section (e.g. Timeline/ for weekly recaps, Editors/Giulio/ for projects). "
+        "This is the PRIMARY mechanism for temporal and contextual queries.\n"
         "CRITICAL: Technical notes are in English, personal notes in Italian. Agents MUST query in English for technical/architectural topics."
     ),
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
@@ -358,7 +362,7 @@ def vault_search(
     semantic: bool = True,
     top_k: int = 5,
     rerank: bool = False,
-    expand: bool = False,
+    expand: bool = True,
     path_prefix: str | None = None,
     file_pattern: str = "*.md",
     max_results: int = 20,
@@ -372,7 +376,9 @@ def vault_search(
                        If False, perform classical exact string search (ripgrep/python).
         top_k:         Number of results to return (semantic search only, default 5, max 20).
         rerank:        If True, re-score candidates using Gemini Flash (semantic search only).
-        expand:        If True, generate query variants via Gemini using a vault knowledge map (semantic search only).
+        expand:        If True (default), use SLM vault router to decompose the query into targeted sub-searches
+                       scoped to specific vault sections (temporal, topical, etc.). Recommended for all queries.
+                       Set to False only for simple exact-match lookups.
         path_prefix:   Optional path prefix to restrict the search (e.g. 'projects/').
         file_pattern:  Glob pattern for classical search (default '*.md').
         max_results:   Maximum results for classical search (default 20).
@@ -405,7 +411,7 @@ def vault_search(
     import json
     from .qmd.db import QMDDatabase
     from .qmd.search_engine import HybridSearchEngine
-    from .qmd.vertex_client import embed_query, expand_query, rerank_chunks
+    from .qmd.vertex_client import embed_query, route_query, rerank_chunks
     from .retention_engine import compute_retention, DEFAULT_CONFIG as DECAY_CONFIG
 
     top_k_val = max(1, min(inp.top_k, 20))  # clamp
@@ -422,12 +428,15 @@ def vault_search(
 
             engine = HybridSearchEngine(db)
 
-            # Query expansion: generate alternative phrasings using Vault Knowledge Map
+            # Vault routing: SLM decomposes query into targeted sub-searches
             if inp.expand:
-                knowledge_map = frontmatter_index.get_knowledge_map_summary()
-                queries = expand_query(inp.query, knowledge_map=knowledge_map)
+                vault_schema = frontmatter_index.get_vault_schema(depth=3)
+                sub_queries = route_query(inp.query, vault_schema)
+                # Primary query is handled by search() itself at weight=2.0;
+                # sub_queries are the additional targeted searches.
+                extra_sub_queries = sub_queries
             else:
-                queries = None
+                extra_sub_queries = None
 
             # Reranker: only wire it up if the agent requested it
             rerank_fn = rerank_chunks if inp.rerank else None
@@ -440,7 +449,7 @@ def vault_search(
             results = engine.search(
                 query=inp.query,
                 top_k=top_k_val,
-                queries=queries[1:] if queries else None,  # extras only, primary is first
+                sub_queries=extra_sub_queries,
                 embed_fn=embed_query,
                 rerank_fn=rerank_fn,
                 get_links_fn=get_links,
@@ -480,9 +489,6 @@ def vault_search(
             # ─────────────────────────────────────────────────────────────────
 
 
-            # Apply path filter post-retrieval (simple prefix match)
-            if inp.path_prefix:
-                results = [r for r in results if r.doc_path.startswith(inp.path_prefix)]
 
             output = [
                 {
@@ -509,7 +515,10 @@ def vault_search(
 
             return json_dumps({
                 "query": inp.query,
-                "expanded_queries": queries[1:] if queries else [],
+                "routed_sub_queries": [
+                    {"query": sq.query, "path_prefix": sq.path_prefix, "weight": sq.weight}
+                    for sq in (extra_sub_queries or [])
+                ],
                 "reranked": inp.rerank,
                 "total": len(output),
                 "index_stats": {"chunks": stats["chunks"], "documents": stats["documents"]},

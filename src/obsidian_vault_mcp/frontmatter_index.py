@@ -198,34 +198,108 @@ class FrontmatterIndex:
         """Return the frontmatter dict for a given vault-relative path, or None."""
         with self._lock:
             return self._index.get(path)
-    def get_knowledge_map_summary(self, max_tags: int = 50, max_aliases: int = 100) -> str:
-        """Generate a compact summary of vault tags and aliases for SLM context."""
-        tags = set()
-        aliases = set()
+    def get_vault_schema(self, depth: int = 3, max_files_per_dir: int = 6) -> str:
+        """Generate a structured vault schema for SLM query routing.
+
+        Builds a depth-limited directory tree enriched with:
+          - dominant note type per directory (from frontmatter 'type' field)
+          - sample recent filenames (up to max_files_per_dir)
+          - current date context for temporal path resolution
+
+        This replaces the flat tag/alias dump from get_knowledge_map_summary(),
+        giving the SLM the spatial understanding it needs to route queries to
+        the correct vault section.
+        """
+        from datetime import datetime
+        from collections import defaultdict, Counter
+
+        now = datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        current_month_path = now.strftime("%Y/%m")
+        last_month = (now.replace(day=1) - __import__('datetime').timedelta(days=1))
+        last_month_path = last_month.strftime("%Y/%m")
+
+        # Build dir → {files, types} map from index
+        dir_files: dict[str, list[str]] = defaultdict(list)
+        dir_types: dict[str, Counter] = defaultdict(Counter)
+
         with self._lock:
-            for fm in self._index.values():
-                # Process tags
-                t = fm.get("tags", [])
-                if isinstance(t, str):
-                    t = [t]
-                elif not isinstance(t, list):
-                    t = []
-                for tag in t:
-                    tags.add(str(tag).strip())
-                    
-                # Process aliases
-                a = fm.get("aliases", [])
-                if isinstance(a, str):
-                    a = [a]
-                elif not isinstance(a, list):
-                    a = []
-                for alias in a:
-                    aliases.add(str(alias).strip())
-                    
-        tags_str = ", ".join(list(tags)[:max_tags])
-        aliases_str = ", ".join(list(aliases)[:max_aliases])
-        
-        return f"Tags: {tags_str}\nAliases: {aliases_str}"
+            for rel_path, fm in self._index.items():
+                parts = rel_path.replace("\\", "/").split("/")
+                # Accumulate at each depth level
+                for d in range(1, min(len(parts), depth + 1)):
+                    dir_key = "/".join(parts[:d])
+                    if d == len(parts) - 1:  # leaf: actual file
+                        dir_files[dir_key].append(parts[-1])
+                    note_type = fm.get("type", "")
+                    if note_type:
+                        dir_types[dir_key][str(note_type)] += 1
+
+        def _type_hint(dir_key: str) -> str:
+            c = dir_types.get(dir_key)
+            if not c:
+                return ""
+            top = c.most_common(1)[0][0]
+            return f" [{top}]"
+
+        def _file_sample(dir_key: str) -> str:
+            files = dir_files.get(dir_key, [])
+            if not files:
+                return ""
+            # Show most recent-looking filenames (sort descending by name)
+            sample = sorted(files, reverse=True)[:max_files_per_dir]
+            return " → " + ", ".join(sample)
+
+        # Walk filesystem for the directory tree (not limited to indexed files)
+        lines = [
+            f"TODAY: {today_str}",
+            f"Current month path: Timeline/{current_month_path}/",
+            f"Previous month path: Timeline/{last_month_path}/",
+            "",
+            "VAULT STRUCTURE (depth 3):",
+        ]
+
+        excluded = config.EXCLUDED_DIRS | {"node_modules", ".obsidian", ".trash"}
+        prefix = config.VAULT_RCLONE_PREFIX
+
+        try:
+            root = config.VAULT_PATH
+            if prefix:
+                root = root / prefix
+
+            def _walk(path: "__import__('pathlib').Path", rel: str, current_depth: int):
+                if current_depth > depth:
+                    return
+                try:
+                    entries = sorted(path.iterdir())
+                except PermissionError:
+                    return
+                subdirs = [e for e in entries if e.is_dir() and e.name not in excluded]
+                files = [e for e in entries if e.is_file() and e.suffix == ".md"]
+
+                indent = "  " * current_depth
+                for sub in subdirs:
+                    rel_sub = (rel + "/" + sub.name).lstrip("/")
+                    type_hint = _type_hint(rel_sub)
+                    lines.append(f"{indent}- {sub.name}/{type_hint}")
+                    _walk(sub, rel_sub, current_depth + 1)
+
+                if files and current_depth == depth:
+                    # At max depth, list sample filenames
+                    sample = sorted([f.name for f in files], reverse=True)[:max_files_per_dir]
+                    lines.append(f"{indent}  files: {', '.join(sample)}")
+
+            _walk(root, prefix or "", 0)
+        except Exception as e:
+            logger.warning(f"get_vault_schema filesystem walk failed: {e}")
+            lines.append("  [schema build error — using index only]")
+
+        lines.extend([
+            "",
+            "NOTE: second-brain/System/ contains agent config. Do NOT route searches there.",
+        ])
+
+        return "\n".join(lines)
 
     # ── LinkIndex queries ──────────────────────────────────────────────────────
 

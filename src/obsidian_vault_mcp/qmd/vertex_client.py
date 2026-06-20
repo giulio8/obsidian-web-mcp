@@ -100,56 +100,86 @@ def embed_query(query: str) -> list[float]:
     return results[0] if results else [0.0] * EMBED_DIM
 
 
-def expand_query(query: str, knowledge_map: str | None = None) -> list[str]:
-    """Generate 1-2 alternative phrasings for the query via Gemini Flash.
+def route_query(query: str, vault_schema: str) -> "list":
+    """Decompose a user query into targeted vault sub-searches via Gemini Flash.
 
-    Used in Phase 3 (query expansion). Returns the original query plus
-    alternatives. Falls back gracefully if the API fails.
+    Instead of generating paraphrases, the SLM acts as a vault router: it reads
+    the vault directory structure and decomposes the query into 1-3 SubQuery
+    objects, each potentially scoped to a specific vault path prefix.
 
     Args:
-        query: original user query
-        knowledge_map: Optional summary of vault tags and aliases to guide expansion
+        query:        Original user query (any language)
+        vault_schema: Structured vault schema from FrontmatterIndex.get_vault_schema()
 
     Returns:
-        list of query strings (original always included as first element)
+        list[SubQuery] - always at least one element (fallback = global sweep).
     """
+    from .search_engine import SubQuery
+    import json as _json
+
+    fallback = [SubQuery(query=query, path_prefix=None, weight=2.0)]
+
     try:
         client = _get_genai_client()
 
-        if knowledge_map:
-            prompt = (
-                "You are an AI search assistant for a personal knowledge base.\n"
-                f"The user is searching for: '{query}'\n\n"
-                "Here is the knowledge map containing the exact terminology (tags and aliases) used in their vault:\n"
-                f"{knowledge_map}\n\n"
-                "Generate 2 alternative phrasings of the search query that capture the same information need. "
-                "CRITICAL: If the query relates to any concept in the knowledge map, you MUST use the exact terms or aliases from the map to maximize search match probability.\n"
-                "Output ONLY the two alternatives, one per line, no numbering, no explanation."
-            )
-        else:
-            prompt = (
-                "Generate 2 alternative phrasings of the following search query "
-                "that capture the same information need but use different words. "
-                "Output ONLY the two alternatives, one per line, no numbering, no explanation.\n\n"
-                f"Query: {query}"
-            )
+        prompt = (
+            "You are the routing brain of a personal knowledge base search system.\n"
+            "Your task is to DECOMPOSE the user query into 1-3 targeted sub-searches,\n"
+            "each aimed at the correct section of the vault. Do NOT rephrase or\n"
+            "generate synonyms - focus exclusively on routing.\n\n"
+            f"{vault_schema}\n\n"
+            f'USER QUERY: "{query}"\n\n'
+            "ROUTING RULES:\n"
+            "- Use path_prefix only when the query clearly targets a specific vault section.\n"
+            "- ALWAYS include at least one sub-query with path_prefix=null as a global fallback.\n"
+            "- For temporal queries (last week, yesterday, recent, questa settimana, etc.),\n"
+            "  route to the Timeline path shown above for the relevant time period.\n"
+            "- For project/work queries, route to Editors/Giulio/ or Knowledge/Reply/.\n"
+            "- Queries may be in Italian or English - route based on meaning, not language.\n"
+            "- weight=2.0 for the most targeted sub-search, weight=1.0 for supporting ones.\n\n"
+            "Output ONLY valid JSON (no markdown, no explanation outside JSON):\n"
+            '{"sub_queries": [{"query": "...", "path_prefix": "..." or null, "weight": 2.0 or 1.0}]}'
+        )
 
         response = client.models.generate_content(
             model=_CHAT_MODEL,
             contents=prompt,
         )
-        alternatives = [
-            line.strip()
-            for line in response.text.strip().splitlines()
-            if line.strip() and line.strip().lower() != query.lower()
-        ][:2]  # cap at 2
 
-        logger.debug(f"Query expanded: {query!r} → {alternatives}")
-        return [query] + alternatives
+        raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        data = _json.loads(raw)
+        parsed = []
+        for item in data.get("sub_queries", []):
+            q = str(item.get("query", "")).strip()
+            if not q:
+                continue
+            parsed.append(SubQuery(
+                query=q,
+                path_prefix=item.get("path_prefix") or None,
+                weight=float(item.get("weight", 1.0)),
+            ))
+
+        if not parsed:
+            logger.warning("route_query: SLM returned no valid sub_queries, using fallback")
+            return fallback
+
+        # Ensure there is always at least one global (unprefixed) sub-query
+        has_global = any(sq.path_prefix is None for sq in parsed)
+        if not has_global:
+            parsed.append(SubQuery(query=query, path_prefix=None, weight=1.0))
+
+        logger.debug(f"route_query: {query!r} -> {[(sq.query, sq.path_prefix) for sq in parsed]}")
+        return parsed
 
     except Exception as e:
-        logger.warning(f"Query expansion failed, using original: {e}")
-        return [query]
+        logger.warning(f"route_query failed, using global fallback: {e}")
+        return fallback
 
 
 def rerank_chunks(query: str, chunks: list[str]) -> list[float]:
