@@ -100,6 +100,7 @@ class HybridSearchEngine:
         get_links_fn: Callable[[str], tuple[set[str], set[str]]] | None = None,
         bm25_limit: int = 30,
         vector_limit: int = 30,
+        path_prefix: str | None = None,
     ) -> list[SearchResult]:
         """Perform hybrid BM25 + vector search with RRF fusion.
 
@@ -115,13 +116,14 @@ class HybridSearchEngine:
                           adds a third graph-based stream expanding from top hits.
             bm25_limit:   How many BM25 candidates to gather per sub-query
             vector_limit: How many vector candidates to gather per sub-query
+            path_prefix:  Optional path prefix to restrict the primary query search
 
         Returns:
             List of SearchResult sorted by descending score, length ≤ top_k
         """
         # Build the list of (sub_query, weight) pairs to execute.
         # Primary query always gets weight 2.0; sub-queries use their own weight.
-        targets: list[SubQuery] = [SubQuery(query=query, path_prefix=None, weight=2.0)]
+        targets: list[SubQuery] = [SubQuery(query=query, path_prefix=path_prefix, weight=2.0)]
         if sub_queries:
             targets.extend(sub_queries)
 

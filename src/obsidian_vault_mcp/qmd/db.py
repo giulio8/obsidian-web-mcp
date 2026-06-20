@@ -95,8 +95,6 @@ CREATE TABLE IF NOT EXISTS chunks (
     doc_path     TEXT NOT NULL DEFAULT ''  -- denormalized from documents.path for O(1) prefix filter
 );
 
-CREATE INDEX IF NOT EXISTS idx_chunks_doc_path ON chunks(doc_path);
-
 -- FTS5 index for BM25 keyword search
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text,
@@ -266,9 +264,11 @@ class QMDDatabase:
                 )
                 """
             )
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_path ON chunks(doc_path)")
             self.conn.commit()
-            logger.info("Migration complete: doc_path backfilled and indexed")
+            logger.info("Migration complete: doc_path backfilled")
+
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_path ON chunks(doc_path)")
+        self.conn.commit()
 
     def insert_chunk(
         self,
