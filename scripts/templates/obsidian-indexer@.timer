@@ -1,0 +1,14 @@
+[Unit]
+Description=QMD-Lite Indexer Timer for %i
+Requires=obsidian-indexer@%i.service
+
+[Timer]
+# Run 2 minutes after boot (to allow rclone mount to initialize)
+OnBootSec=2min
+# Then run every 15 minutes
+OnUnitActiveSec=15min
+# Run immediately if a scheduled execution was missed while system was down
+Persistent=true
+
+[Install]
+WantedBy=timers.target

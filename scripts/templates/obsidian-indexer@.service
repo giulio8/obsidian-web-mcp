@@ -1,0 +1,16 @@
+[Unit]
+Description=QMD-Lite Incremental Vault Indexer for %i
+After=rclone-mount@%i.service
+Requires=rclone-mount@%i.service
+
+[Service]
+Type=oneshot
+User=giulio
+Group=giulio
+WorkingDirectory=/home/giulio/obsidian-web-mcp
+EnvironmentFile=/etc/default/obsidian-mcp-%i
+ExecStart=/usr/local/bin/uv run --project /home/giulio/obsidian-web-mcp qmd-index
+Restart=no
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=obsidian-indexer-%i

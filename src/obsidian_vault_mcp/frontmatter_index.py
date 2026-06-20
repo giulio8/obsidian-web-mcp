@@ -143,6 +143,16 @@ class FrontmatterIndex:
         self._observer.schedule(handler, str(config.VAULT_PATH), recursive=True)
         self._observer.start()
 
+        # Trigger incremental QMD search database indexing on startup
+        try:
+            from obsidian_vault_mcp.qmd.db import QMDDatabase
+            from obsidian_vault_mcp.qmd.indexer import VaultIndexer
+            with QMDDatabase() as db:
+                indexer = VaultIndexer(config.VAULT_PATH, db, embed=True)
+                indexer.run_delta()
+        except Exception as e:
+            logger.error("Failed to run initial QMD index on startup: %s", e)
+
     def stop(self) -> None:
         """Stop the filesystem observer and cancel any pending debounce."""
         if self._debounce_timer is not None:
@@ -447,6 +457,16 @@ class FrontmatterIndex:
                 with self._lock:
                     self._index.pop(rel, None)
                 self._remove_links_for(rel)
+
+        # Trigger incremental QMD search database indexing for any modifications
+        try:
+            from obsidian_vault_mcp.qmd.db import QMDDatabase
+            from obsidian_vault_mcp.qmd.indexer import VaultIndexer
+            with QMDDatabase() as db:
+                indexer = VaultIndexer(config.VAULT_PATH, db, embed=True)
+                indexer.run_delta()
+        except Exception as e:
+            logger.error("Failed to run incremental QMD index on watchdog flush: %s", e)
 
 
 class _VaultEventHandler(FileSystemEventHandler):
