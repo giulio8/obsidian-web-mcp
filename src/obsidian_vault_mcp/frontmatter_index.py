@@ -284,8 +284,8 @@ class FrontmatterIndex:
                     lines.append(f"{indent}- {sub.name}/{type_hint}")
                     _walk(sub, rel_sub, current_depth + 1)
 
-                if files and current_depth == depth:
-                    # At max depth, list sample filenames
+                if files and current_depth > 0 and (not subdirs or current_depth == depth):
+                    # List sample filenames for leaf directories or at max depth
                     sample = sorted([f.name for f in files], reverse=True)[:max_files_per_dir]
                     lines.append(f"{indent}  files: {', '.join(sample)}")
 
