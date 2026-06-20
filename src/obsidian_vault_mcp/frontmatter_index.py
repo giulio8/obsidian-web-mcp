@@ -26,7 +26,7 @@ from pathlib import Path
 
 import frontmatter
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver as Observer
 
 from . import config
 

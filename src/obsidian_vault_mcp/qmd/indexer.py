@@ -90,6 +90,7 @@ class VaultIndexer:
         disk_paths = {str(p.relative_to(self.vault_path)) for p in md_files}
 
         # --- Deletions ---
+        deletions_occurred = False
         for row in self.db.conn.execute("SELECT id, path FROM documents").fetchall():
             if row["path"] not in disk_paths:
                 self.db.delete_document_chunks(row["id"])
@@ -97,7 +98,10 @@ class VaultIndexer:
                     "DELETE FROM documents WHERE id = ?", (row["id"],)
                 )
                 stats.removed += 1
+                deletions_occurred = True
                 logger.debug(f"Removed stale document: {row['path']}")
+        if deletions_occurred:
+            self.db.commit()
 
         # --- Index / update ---
         pending_chunks: list[Chunk] = []    # chunks waiting for embedding
